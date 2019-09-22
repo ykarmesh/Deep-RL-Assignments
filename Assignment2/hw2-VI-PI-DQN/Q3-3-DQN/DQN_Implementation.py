@@ -51,6 +51,7 @@ class Replay_Memory():
 		# Appends transition to the memory. 	
 		pass
 
+
 class DQN_Agent():
 
 	# In this class, we will implement functions to do the following. 
@@ -93,8 +94,32 @@ class DQN_Agent():
 	def burn_in_memory():
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
 		pass
-		
-		
+
+
+# Note: if you have problems creating video captures on servers without GUI,
+#       you could save and relaod model to create videos on your laptop. 
+def test_video(agent, env, epi):
+	# Usage: 
+	# 	you can pass the arguments within agent.train() as:
+	# 		if episode % int(self.num_episodes/3) == 0:
+    #       	test_video(self, self.environment_name, episode)
+    save_path = "./videos-%s-%s" % (env, epi)
+    if not os.pa th.exists(save_path):
+        os.mkdir(save_path)
+    # To create video
+    env = gym.wrappers.Monitor(agent.env, save_path, force=True)
+    reward_total = []
+    state = env.reset()
+    done = False
+    while not done:
+        env.render()
+        action = agent.epsilon_greedy_policy(state, 0.05)
+        next_state, reward, done, info = env.step(action)
+        state = next_state
+        reward_total.append(reward)
+    print("reward_total: {}".format(np.sum(reward_total)))
+    agent.env.close()
+
 
 def parse_arguments():
 	parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
@@ -103,6 +128,7 @@ def parse_arguments():
 	parser.add_argument('--train',dest='train',type=int,default=1)
 	parser.add_argument('--model',dest='model_file',type=str)
 	return parser.parse_args()
+
 
 def main(args):
 
