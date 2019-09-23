@@ -1,3 +1,6 @@
+
 *.tex
 .*
 *.pyc
+venv/
+

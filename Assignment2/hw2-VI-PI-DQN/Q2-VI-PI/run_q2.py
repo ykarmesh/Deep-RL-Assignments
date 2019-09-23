@@ -5,18 +5,33 @@ from builtins import input
 import gym
 import deeprl_hw2q2.lake_envs as lake_env
 import time
-from deeprl_hw2q2.rl import policy_iteration_sync
-from deeprl_hw2q2.rl import evaluate_policy_sync
+from deeprl_hw2q2.rl import policy_iteration_sync, value_iteration_sync, policy_iteration_async_ordered, \
+    policy_iteration_async_randperm, value_iteration_async_ordered, value_iteration_async_randperm
 
 def main():
     # create the environment
     env = gym.make('Deterministic-4x4-FrozenLake-v0')
     gamma = 0.9
+    method = 'value_iteration_async_randperm'
 
-    policy, value_func, policy_iters, value_iters =  policy_iteration_sync(env, gamma)
-    # print('Agent received total reward of: %f' % total_reward)
-    print('Value function took %d steps' % value_iters)
-
+    if method == 'policy_iteration':
+        policy, value_func, policy_iters, value_iters =  policy_iteration_sync(env, gamma)
+        print('Value function took %d steps' % value_iters)
+    elif method == 'value_iteration':
+        value_func, iters = value_iteration_sync(env, gamma)
+        print('Value function took %d steps' % iters)
+    elif method == 'policy_iteration_async_ordered':
+        policy, value_func, policy_iters, value_iters = policy_iteration_async_ordered(env, gamma)
+        print('Value function took %d steps' % value_iters)
+    elif method == 'policy_iteration_async_randperm':
+        policy, value_func, policy_iters, value_iters = policy_iteration_async_randperm(env, gamma)
+        print('Value function took %d steps' % value_iters)
+    elif method == 'value_iteration_async_ordered':
+        value_func, iters = value_iteration_async_ordered(env, gamma)
+        print('Value function took %d steps' % iters)
+    elif method == 'value_iteration_async_randperm':
+        value_func, iters = value_iteration_async_randperm(env, gamma)
+        print('Value function took %d steps' % iters)
 
 if __name__ == '__main__':
     main()
