@@ -16,27 +16,25 @@ class QNetwork():
 	# The network should take in state of the world as an input, 
 	# and output Q values of the actions available to the agent as the output.
 
-	def __init__(self, args, input, output):
+	def __init__(self, args, input, output, learning_rate):
 		# Define your network architecture here. It is also a good idea to define any training operations 
 		# and optimizers here, initialize your variables, or alternately compile your model here.  
 		folder_path = os.path.abspath(__file__)
 		self.file_path = os.path.join(folder_path, "dqn_network.h5")
 		if args.model_file is None:
 			self.model = keras.models.Sequential()      
-			self.model.add(Dense(10, activation='relu', input_dim=input))
+			self.model.add(Dense(32, activation='relu', input_dim=input))
 			self.model.add(Dense(32, activation='relu'))
 			self.model.add(Dense(output))
-			# adam = keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, amsgrad=False) #TODO Add predefined values
-			self.model.compile(loss='mean_squared_error', optimizer=tf.train.AdamOptimizer(), metrics=['accuracy'])
+			adam = keras.optimizers.Adam(lr=learning_rate)
+			self.model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])			
+			# self.model.compile(loss='mean_squared_error', optimizer=tf.train.AdamOptimizer(), metrics=['accuracy'])
 		else:
 			self.load_model_weights(args.model_file)
-		
-  
 
 	def save_model_weights(self):
 		# Helper function to save your model / weights. 
 		self.model.save(self.file_path)
-		pass
 
 	def load_model_weights(self, weight_file):
 		# Helper funciton to load model weights. 
@@ -58,7 +56,7 @@ class Replay_Memory():
 		self.burn_in = burn_in
 		self.states = np.zeros((self.memory_size, state_dim)) 
 		self.next_states = np.zeros((self.memory_size, state_dim))
-		self.actions = np.zeros((self.memory_size, action_dim))
+		self.actions = np.zeros((self.memory_size, 1))
 		self.rewards = np.zeros((self.memory_size, 1))
 		self.dones = np.zeros((self.memory_size, 1))
 		self.ptr = 0
@@ -113,29 +111,43 @@ class DQN_Agent():
 		# Create an instance of the network itself, as well as the memory. 
 		# Here is also a good place to set environmental parameters,
 		# as well as training parameters - number of episodes / iterations, etc. 
+		
+		# Inputs
 		self.args = args
 		self.environment_name = self.args.env
 		self.render = self.args.render
 		self.epsilon = 0.5
+		self.network_update_freq = 50
+
+		# Env related variables
 		if self.environment_name == 'CartPole-v0':
 			self.env = gym.make(self.environment_name)
 			self.discount_factor = 0.99
 			self.learning_rate = 0.001
+			self.no_episodes = 50000
 		
 		elif self.environment_name == 'MountainCar-v0':
 			self.env = gym.make(self.environment_name)
 			self.discount_factor = 1.00
 			self.learning_rate = 0.0001
+			self.no_episodes = 10000
 		else:
 			raise Exception("Unknown Environment")
-		self.q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0])
+
+		# Other Classes
+		self.q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0], self.learning_rate)
+		self.target_q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0], self.learning_rate)
 		self.memory = Replay_Memory( self.env.observation_space.shape[0], self.env.action_space.shape[0])
+
+		# Plotting
+		self.rewards = []
+		self.td_error = []
 
 	def epsilon_greedy_policy(self, q_values):
 		# Creating epsilon greedy probabilities to sample from.             
 		p = np.random.uniform(0, 1)
 		if p < self.epsilon:
-			return np.random.choice(self.env.action_space.shape[0], 1)[0]
+			return self.env.action_space.sample()
 		else:
 			return np.argmax(q_values)
 
@@ -149,18 +161,45 @@ class DQN_Agent():
 
 		# When use replay memory, you should interact with environment here, and store these 
 		# transitions to memory, while also updating your model.
-		pass
+		counter = 0
+		self.burn_in_memory()
+		while(self.no_episodes > counter):
+			# Generate Episodes using Epsilon Greedy Policy
+			self.generate_episode(policy=self.epsilon_greedy_policy)
+			self.train_network(counter)
+			if counter%100 == 0:
+				self.rewards.append(self.test(episodes=20))
+			if counter%self.network_update_freq == 0:
+				self.hard_update()
+			counter += 1 
+			self.epsilon_decay()
+		self.plots()
+
+	def train_network(self, counter):
+		state, action, rewards, next_state, done = self.memory.sample_batch(batch_size=128)
+		_y = rewards + self.discount_factor*np.multiply((1 - done),np.amax(self.target_q_network.model.predict_on_batch(state), axis=1, keepdims=True))
+		y = self.q_network.model.predict_on_batch(state)
+		y[:,action.squeeze().astype(int)] = _y
+		history = self.q_network.model.fit(state, y, epochs=1, batch_size=32, verbose=False)
+		loss = history.history['loss'][-1]
+		acc = history.history['acc'][-1]
+		if (counter+1)%100 == 0:
+			print("Iter {} | Loss {}".format(counter, loss))
+
+	def hard_update(self):
+		self.target_q_network.model.set_weights(self.q_network.model.get_weights())
 
 	def test(self, model_file=None, episodes=100):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
 		count = 0
-		cum_reward = 0
+		cum_reward = []
 		while(count < episodes):
-			cum_reward += self.generate_episode(policy=self.greedy_policy, test=True)
+			cum_reward.append(self.generate_episode(policy=self.greedy_policy, test=True))
 			count += 1
-		print("Test rewards : {}".format(cum_reward))
-		return cum_reward
+		cum_reward = np.array(cum_reward)
+		print("Test rewards : {}".format(np.mean(cum_reward)))
+		return np.mean(cum_reward)
 
 
 	def burn_in_memory(self):
@@ -186,6 +225,20 @@ class DQN_Agent():
 			if not done:
 				state = copy.deepcopy(next_state)
 		return rewards
+
+	def plots(self):
+		"""
+		Plots: 
+		1) Avg Cummulative Test Reward over 20 Plots
+		2) TD Error
+		"""
+		pass
+
+	def epsilon_decay(self, initial_eps=0.5, final_eps=0.05):
+		if(self.epsilon > final_eps):
+			factor = (initial_eps - final_eps)/10000
+			self.epsilon -= factor
+
 
 
 # Note: if you have problems creating video captures on servers without GUI,
@@ -237,7 +290,7 @@ def main(args):
 
 	# You want to create an instance of the DQN_Agent class here, and then train / test it. 
 	q_agent = DQN_Agent(args)
-	q_agent.burn_in_memory()
+	q_agent.train()
 
 if __name__ == '__main__':
 	main(sys.argv)
