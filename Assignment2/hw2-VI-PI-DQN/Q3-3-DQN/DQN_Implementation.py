@@ -9,6 +9,7 @@ import copy
 import os
 import argparse
 import pdb
+import matplotlib.pyplot as plt
 
 class QNetwork():
 
@@ -25,7 +26,7 @@ class QNetwork():
 			self.model = keras.models.Sequential()      
 			self.model.add(Dense(32, activation='relu', input_dim=input))
 			self.model.add(Dense(32, activation='relu'))
-			self.model.add(Dense(output))
+			self.model.add(Dense(output, activation='linear'))
 			adam = keras.optimizers.Adam(lr=learning_rate)
 			self.model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])			
 			# self.model.compile(loss='mean_squared_error', optimizer=tf.train.AdamOptimizer(), metrics=['accuracy'])
@@ -65,8 +66,8 @@ class Replay_Memory():
 
 	def append(self, states, actions, rewards, next_states, dones):
 		self.states[self.ptr] = states
-		self.actions[self.ptr] = actions 
-		self.rewards[self.ptr, 0] = rewards      
+		self.actions[self.ptr, 0] = actions
+		self.rewards[self.ptr, 0] = rewards
 		self.next_states[self.ptr] = next_states
 		self.dones[self.ptr, 0] = dones
 		self.ptr += 1
@@ -124,13 +125,13 @@ class DQN_Agent():
 			self.env = gym.make(self.environment_name)
 			self.discount_factor = 0.99
 			self.learning_rate = 0.001
-			self.no_episodes = 50000
+			self.num_episodes = 5000
 		
 		elif self.environment_name == 'MountainCar-v0':
 			self.env = gym.make(self.environment_name)
 			self.discount_factor = 1.00
 			self.learning_rate = 0.0001
-			self.no_episodes = 10000
+			self.num_episodes = 10000
 		else:
 			raise Exception("Unknown Environment")
 
@@ -142,6 +143,7 @@ class DQN_Agent():
 		# Plotting
 		self.rewards = []
 		self.td_error = []
+		self.batch = [i for i in range(32)]
 
 	def epsilon_greedy_policy(self, q_values):
 		# Creating epsilon greedy probabilities to sample from.             
@@ -163,25 +165,33 @@ class DQN_Agent():
 		# transitions to memory, while also updating your model.
 		counter = 0
 		self.burn_in_memory()
-		while(self.no_episodes > counter):
+		while(self.num_episodes > counter):
 			# Generate Episodes using Epsilon Greedy Policy
 			self.generate_episode(policy=self.epsilon_greedy_policy)
 			self.train_network(counter)
 			if counter%100 == 0:
-				self.rewards.append(self.test(episodes=20))
+				self.rewards.append([self.test(episodes=20), counter])
 			if counter%self.network_update_freq == 0:
 				self.hard_update()
 			counter += 1 
 			self.epsilon_decay()
+			if counter % int(self.num_episodes/3) == 0:
+				test_video(self, self.environment_name, counter)
+
 		self.plots()
 
 	def train_network(self, counter):
-		state, action, rewards, next_state, done = self.memory.sample_batch(batch_size=128)
-		_y = rewards + self.discount_factor*np.multiply((1 - done),np.amax(self.target_q_network.model.predict_on_batch(state), axis=1, keepdims=True))
+		state, action, rewards, next_state, done = self.memory.sample_batch(batch_size=32)
+		# pdb.set_trace()
+		# y = r + gamma * (1 - done) * max(q(s,a))
+		_y = rewards + self.discount_factor*np.multiply((1 - done),np.amax(self.target_q_network.model.predict_on_batch(next_state), axis=1, keepdims=True))
 		y = self.q_network.model.predict_on_batch(state)
-		y[:,action.squeeze().astype(int)] = _y
+		y[self.batch,action.squeeze().astype(int)] = _y.squeeze()
+
+		# Network Input - S | Output - Q(S,A) | Error - (Y - Q(S,A))^2
 		history = self.q_network.model.fit(state, y, epochs=1, batch_size=32, verbose=False)
 		loss = history.history['loss'][-1]
+		self.td_error.append([loss, counter])
 		acc = history.history['acc'][-1]
 		if (counter+1)%100 == 0:
 			print("Iter {} | Loss {}".format(counter, loss))
@@ -232,7 +242,23 @@ class DQN_Agent():
 		1) Avg Cummulative Test Reward over 20 Plots
 		2) TD Error
 		"""
-		pass
+		reward, time =  zip(*self.rewards)
+		plt.figure(figsize=(8, 3))
+		plt.subplot(121)
+		plt.title('Cummulative Reward')
+		plt.plot(time, reward)
+		plt.xlabel('iterations')
+		plt.ylabel('rewards')
+		plt.legend()
+		plt.ylim([0, None])
+
+		loss, time =  zip(*self.td_error)
+		plt.subplot(122)
+		plt.title('Loss')
+		plt.plot(time, loss)
+		plt.xlabel('iterations')
+		plt.ylabel('loss')
+		plt.show()
 
 	def epsilon_decay(self, initial_eps=0.5, final_eps=0.05):
 		if(self.epsilon > final_eps):
@@ -243,12 +269,12 @@ class DQN_Agent():
 
 # Note: if you have problems creating video captures on servers without GUI,
 #       you could save and relaod model to create videos on your laptop. 
-def test_video(agent, env, epi):
+def test_video(agent, env_name, epi):
 	# Usage: 
 	# 	you can pass the arguments within agent.train() as:
 	# 		if episode % int(self.num_episodes/3) == 0:
     #       	test_video(self, self.environment_name, episode)
-    save_path = "./videos-%s-%s" % (env, epi)
+    save_path = "./videos-%s-%s" % (env_name, epi)
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     # To create video
@@ -258,7 +284,9 @@ def test_video(agent, env, epi):
     done = False
     while not done:
         env.render()
-        action = agent.epsilon_greedy_policy(state, 0.05)
+        print("Video recording the agent with Epsilon {}".format(agent.epsilon))
+        q_values = agent.q_network.model.predict(state.reshape(1,-1))
+        action = agent.epsilon_greedy_policy(q_values)
         next_state, reward, done, info = env.step(action)
         state = next_state
         reward_total.append(reward)
