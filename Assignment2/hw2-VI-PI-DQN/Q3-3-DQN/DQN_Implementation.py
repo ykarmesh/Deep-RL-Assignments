@@ -117,8 +117,8 @@ class DQN_Agent():
 		self.args = args
 		self.environment_name = self.args.env
 		self.render = self.args.render
-		self.epsilon = 0.5
-		self.network_update_freq = 50
+		self.epsilon = args.epsilon
+		self.network_update_freq = 10
 
 		# Env related variables
 		if self.environment_name == 'CartPole-v0':
@@ -145,10 +145,10 @@ class DQN_Agent():
 		self.td_error = []
 		self.batch = [i for i in range(32)]
 
-	def epsilon_greedy_policy(self, q_values):
+	def epsilon_greedy_policy(self, q_values, epsilon):
 		# Creating epsilon greedy probabilities to sample from.             
 		p = np.random.uniform(0, 1)
-		if p < self.epsilon:
+		if p < epsilon:
 			return self.env.action_space.sample()
 		else:
 			return np.argmax(q_values)
@@ -167,15 +167,20 @@ class DQN_Agent():
 		self.burn_in_memory()
 		while(self.num_episodes > counter):
 			# Generate Episodes using Epsilon Greedy Policy
-			self.generate_episode(policy=self.epsilon_greedy_policy)
+			self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=self.epsilon,frameskip=self.args.frameskip)
 			self.train_network(counter)
 			if counter%100 == 0:
-				self.rewards.append([self.test(episodes=20), counter])
+				test_reward, test_error = self.test(episodes=20)
+				self.rewards.append([test_reward, counter])
+				self.td_error.append([test_error, counter])
 			if counter%self.network_update_freq == 0:
 				self.hard_update()
 			counter += 1 
-			self.epsilon_decay()
-			if counter % int(self.num_episodes/3) == 0:
+			if self.environment_name == 'MountainCar-v0' and counter < 2000:
+				pass
+			else:
+				self.epsilon_decay()
+			if counter % int(self.num_episodes/3) == 0 and self.args.render:
 				test_video(self, self.environment_name, counter)
 
 		self.plots()
@@ -191,7 +196,6 @@ class DQN_Agent():
 		# Network Input - S | Output - Q(S,A) | Error - (Y - Q(S,A))^2
 		history = self.q_network.model.fit(state, y, epochs=1, batch_size=32, verbose=False)
 		loss = history.history['loss'][-1]
-		self.td_error.append([loss, counter])
 		acc = history.history['acc'][-1]
 		if (counter+1)%100 == 0:
 			print("Iter {} | Loss {}".format(counter, loss))
@@ -204,37 +208,49 @@ class DQN_Agent():
 		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
 		count = 0
 		cum_reward = []
+		td_error = []
 		while(count < episodes):
-			cum_reward.append(self.generate_episode(policy=self.greedy_policy, test=True))
+			reward, error = self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=0.05, test=True, frameskip=self.args.frameskip)
+			cum_reward.append(reward)
+			td_error.append(error)
 			count += 1
 		cum_reward = np.array(cum_reward)
+		td_error = np.array(td_error)
 		print("Test rewards : {}".format(np.mean(cum_reward)))
-		return np.mean(cum_reward)
+		return np.mean(cum_reward), np.mean(td_error)
 
 
 	def burn_in_memory(self):
 		# Initialize your replay memory with a burn_in number of episodes / transitions. 
 		while not self.memory.burned_in:
-			self.generate_episode(policy=self.epsilon_greedy_policy)
+			self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=self.epsilon, frameskip=self.args.frameskip)
 		print("Burn Complete!")
 
-	def generate_episode(self, policy, test=False):
+	def generate_episode(self, policy, epsilon, test=False, frameskip=1):
 		"""
 		Collects one rollout from the policy in an environment.
 		"""
 		done = False
 		state = self.env.reset()
 		rewards = 0
+		q_values = self.q_network.model.predict(state.reshape(1,-1))
+		td_error = []
 		while not done:
-			q_values = self.q_network.model.predict(state.reshape(1,-1))
-			action = policy(q_values)
-			next_state, reward, done, info = self.env.step(action)
+			action = policy(q_values, epsilon)
+			i = 0
+			while (i < frameskip) and not done:
+				next_state, reward, done, info = self.env.step(action)
+				i += 1
 			rewards += reward
+			next_q_values = self.q_network.model.predict(next_state.reshape(1,-1))
 			if not test:
 				self.memory.append(state, action, reward, next_state, done)
+			else:
+				td_error.append(abs(reward + self.discount_factor*(1-done)*np.max(next_q_values) - q_values))
 			if not done:
 				state = copy.deepcopy(next_state)
-		return rewards
+				q_values = copy.deepcopy(next_q_values)
+		return rewards, np.mean(td_error)
 
 	def plots(self):
 		"""
@@ -260,7 +276,7 @@ class DQN_Agent():
 		plt.ylabel('loss')
 		plt.show()
 
-	def epsilon_decay(self, initial_eps=0.5, final_eps=0.05):
+	def epsilon_decay(self, initial_eps=1.0, final_eps=0.05):
 		if(self.epsilon > final_eps):
 			factor = (initial_eps - final_eps)/10000
 			self.epsilon -= factor
@@ -282,11 +298,11 @@ def test_video(agent, env_name, epi):
     reward_total = []
     state = env.reset()
     done = False
+    print("Video recording the agent with Epsilon {}".format(agent.epsilon))
     while not done:
         env.render()
-        print("Video recording the agent with Epsilon {}".format(agent.epsilon))
         q_values = agent.q_network.model.predict(state.reshape(1,-1))
-        action = agent.epsilon_greedy_policy(q_values)
+        action = agent.greedy_policy(q_values)
         next_state, reward, done, info = env.step(action)
         state = next_state
         reward_total.append(reward)
@@ -297,8 +313,11 @@ def test_video(agent, env_name, epi):
 def parse_arguments():
 	parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
 	parser.add_argument('--env',dest='env',type=str)
-	parser.add_argument('--render',dest='render',type=int,default=0)
+	parser.add_argument('--render',dest='render',type=bool,default=False)
 	parser.add_argument('--train',dest='train',type=int,default=1)
+	parser.add_argument('--frameskip',dest='frameskip',type=int,default=1)
+	parser.add_argument('--update_freq',dest='network_update_freq',type=int,default=10)
+	parser.add_argument('--epsilon',dest='epsilon',type=float,default=1.0)
 	parser.add_argument('--model',dest='model_file',type=str)
 	return parser.parse_args()
 
