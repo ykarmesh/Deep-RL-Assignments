@@ -24,8 +24,9 @@ class QNetwork():
 		self.file_path = os.path.join(folder_path, "dqn_network.h5")
 		if args.model_file is None:
 			self.model = keras.models.Sequential()      
-			self.model.add(Dense(32, activation='relu', input_dim=input))
-			self.model.add(Dense(32, activation='relu'))
+			self.model.add(Dense(64, activation='relu', input_dim=input))
+			self.model.add(Dense(64, activation='relu'))
+			self.model.add(Dense(64, activation='relu'))
 			self.model.add(Dense(output, activation='linear'))
 			adam = keras.optimizers.Adam(lr=learning_rate)
 			self.model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])			
@@ -118,19 +119,19 @@ class DQN_Agent():
 		self.environment_name = self.args.env
 		self.render = self.args.render
 		self.epsilon = args.epsilon
-		self.network_update_freq = 10
+		self.network_update_freq = args.network_update_freq
+		self.number_of_updates = self.args.nos_updates
+		self.learning_rate =self.args.learning_rate
 
 		# Env related variables
 		if self.environment_name == 'CartPole-v0':
 			self.env = gym.make(self.environment_name)
 			self.discount_factor = 0.99
-			self.learning_rate = 0.001
 			self.num_episodes = 5000
 		
 		elif self.environment_name == 'MountainCar-v0':
 			self.env = gym.make(self.environment_name)
 			self.discount_factor = 1.00
-			self.learning_rate = 0.0001
 			self.num_episodes = 10000
 		else:
 			raise Exception("Unknown Environment")
@@ -138,7 +139,7 @@ class DQN_Agent():
 		# Other Classes
 		self.q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0], self.learning_rate)
 		self.target_q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0], self.learning_rate)
-		self.memory = Replay_Memory( self.env.observation_space.shape[0], self.env.action_space.shape[0])
+		self.memory = Replay_Memory( self.env.observation_space.shape[0], self.env.action_space.shape[0], memory_size=self.args.memory_size)
 
 		# Plotting
 		self.rewards = []
@@ -168,18 +169,16 @@ class DQN_Agent():
 		while(self.num_episodes > counter):
 			# Generate Episodes using Epsilon Greedy Policy
 			self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=self.epsilon,frameskip=self.args.frameskip)
-			self.train_network(counter)
+			for i in range(self.number_of_updates):
+				self.train_network(counter)
 			if counter%100 == 0:
 				test_reward, test_error = self.test(episodes=20)
 				self.rewards.append([test_reward, counter])
 				self.td_error.append([test_error, counter])
 			if counter%self.network_update_freq == 0:
 				self.hard_update()
-			counter += 1 
-			if self.environment_name == 'MountainCar-v0' and counter < 2000:
-				pass
-			else:
-				self.epsilon_decay()
+			counter += 1
+			self.epsilon_decay()
 			if counter % int(self.num_episodes/3) == 0 and self.args.render:
 				test_video(self, self.environment_name, counter)
 
@@ -187,7 +186,8 @@ class DQN_Agent():
 
 	def train_network(self, counter):
 		state, action, rewards, next_state, done = self.memory.sample_batch(batch_size=32)
-		# pdb.set_trace()
+		# if np.any(done == 1):
+		# 	pdb.set_trace()
 		# y = r + gamma * (1 - done) * max(q(s,a))
 		_y = rewards + self.discount_factor*np.multiply((1 - done),np.amax(self.target_q_network.model.predict_on_batch(next_state), axis=1, keepdims=True))
 		y = self.q_network.model.predict_on_batch(state)
@@ -206,14 +206,12 @@ class DQN_Agent():
 	def test(self, model_file=None, episodes=100):
 		# Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
 		# Here you need to interact with the environment, irrespective of whether you are using a memory. 
-		count = 0
 		cum_reward = []
 		td_error = []
-		while(count < episodes):
+		for count in range(episodes):
 			reward, error = self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=0.05, test=True, frameskip=self.args.frameskip)
 			cum_reward.append(reward)
 			td_error.append(error)
-			count += 1
 		cum_reward = np.array(cum_reward)
 		td_error = np.array(td_error)
 		print("Test rewards : {}".format(np.mean(cum_reward)))
@@ -240,8 +238,8 @@ class DQN_Agent():
 			i = 0
 			while (i < frameskip) and not done:
 				next_state, reward, done, info = self.env.step(action)
+				rewards += reward
 				i += 1
-			rewards += reward
 			next_q_values = self.q_network.model.predict(next_state.reshape(1,-1))
 			if not test:
 				self.memory.append(state, action, reward, next_state, done)
@@ -250,6 +248,8 @@ class DQN_Agent():
 			if not done:
 				state = copy.deepcopy(next_state)
 				q_values = copy.deepcopy(next_q_values)
+		# if rewards > -200/self.args.frameskip:
+		# 	print(rewards)
 		return rewards, np.mean(td_error)
 
 	def plots(self):
@@ -303,9 +303,13 @@ def test_video(agent, env_name, epi):
         env.render()
         q_values = agent.q_network.model.predict(state.reshape(1,-1))
         action = agent.greedy_policy(q_values)
-        next_state, reward, done, info = env.step(action)
+        # action = agent.epsilon_greedy_policy(q_values, agent.epsilon)
+        i = 0
+        while (i < agent.args.frameskip) and not done:
+            next_state, reward, done, info = agent.env.step(action)
+            reward_total.append(reward)
+            i += 1
         state = next_state
-        reward_total.append(reward)
     print("reward_total: {}".format(np.sum(reward_total)))
     agent.env.close()
 
@@ -313,10 +317,13 @@ def test_video(agent, env_name, epi):
 def parse_arguments():
 	parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
 	parser.add_argument('--env',dest='env',type=str)
-	parser.add_argument('--render',dest='render',type=bool,default=False)
+	parser.add_argument('--render',dest='render', action="store_true", default=False)
 	parser.add_argument('--train',dest='train',type=int,default=1)
 	parser.add_argument('--frameskip',dest='frameskip',type=int,default=1)
 	parser.add_argument('--update_freq',dest='network_update_freq',type=int,default=10)
+	parser.add_argument('--lr',dest='learning_rate',type=float,default=0.001)
+	parser.add_argument('--nos_updates',dest='nos_updates',type=int,default=1)
+	parser.add_argument('--memory_size',dest='memory_size',type=int,default=50000)
 	parser.add_argument('--epsilon',dest='epsilon',type=float,default=1.0)
 	parser.add_argument('--model',dest='model_file',type=str)
 	return parser.parse_args()
