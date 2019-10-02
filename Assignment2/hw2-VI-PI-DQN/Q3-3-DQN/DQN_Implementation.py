@@ -31,12 +31,12 @@ class QNetwork():
         self.weights_path = 'models/%s/%s' % (args.env, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
         if args.model_file is None:
             self.model = keras.models.Sequential()      
-            self.model.add(Dense(128, activation='relu', input_dim=input))
-            self.model.add(Dense(128, activation='relu'))
-            self.model.add(Dense(128, activation='relu'))
-            self.model.add(Dense(output, activation='linear'))
+            self.model.add(Dense(128, activation='relu', input_dim=input, kernel_initializer=keras.initializers.VarianceScaling(scale=2.0)))
+            self.model.add(Dense(128, activation='relu', kernel_initializer=keras.initializers.VarianceScaling(scale=2.0)))
+            self.model.add(Dense(128, activation='relu', kernel_initializer=keras.initializers.VarianceScaling(scale=2.0)))
+            self.model.add(Dense(output, activation='linear', kernel_initializer=keras.initializers.VarianceScaling(scale=2.0)))
             adam = keras.optimizers.Adam(lr=learning_rate)
-            self.model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])         
+            self.model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])
             # self.model.compile(loss='mean_squared_error', optimizer=tf.train.AdamOptimizer(), metrics=['accuracy'])
         else:
             self.load_model_weights(args.model_file)
