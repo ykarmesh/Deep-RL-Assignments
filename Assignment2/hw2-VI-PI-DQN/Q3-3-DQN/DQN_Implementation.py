@@ -5,6 +5,7 @@ import pdb
 import sys
 import copy
 import argparse
+import datetime
 
 import gym
 import keras
@@ -46,11 +47,10 @@ class QNetwork():
 
 
 class Replay_Memory():
+    # The memory essentially stores transitions recorder from the agent
+    # taking actions in the environment.
 
     def __init__(self, state_dim, action_dim, memory_size=50000, burn_in=10000):
-        # The memory essentially stores transitions recorder from the agent
-        # taking actions in the environment.
-
         # Burn in episodes define the number of episodes that are written into the memory from the 
         # randomly initialized agent. Memory size is the maximum size after which old elements in the memory are replaced. 
         # A simple (if not the most efficient) way to implement the memory is as a list of transitions. 
@@ -81,7 +81,8 @@ class Replay_Memory():
             self.not_full_yet = False
 
     def sample_batch(self, batch_size=32):   
-        # This function returns a batch of randomly sampled transitions - i.e. state, action, reward, next state, terminal flag tuples. 
+        # This function returns a batch of randomly sampled transitions
+        # i.e. state, action, reward, next state, terminal flag tuples. 
         # You will feed this to your model to train.
         if(self.not_full_yet):
             idxs = np.random.choice(self.ptr, batch_size, False)
@@ -117,6 +118,7 @@ class DQN_Agent():
         self.render = self.args.render
         self.epsilon = args.epsilon
         self.network_update_freq = 10
+        self.tensorboard_freq = 25
 
         # Env related variables
         if self.environment_name == 'CartPole-v0':
@@ -133,14 +135,21 @@ class DQN_Agent():
             raise Exception("Unknown Environment")
 
         # Other Classes
-        self.q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0], self.learning_rate)
-        self.target_q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0], self.learning_rate)
-        self.memory = Replay_Memory( self.env.observation_space.shape[0], self.env.action_space.shape[0])
+        self.q_network = QNetwork(args, self.env.observation_space.shape[0],
+            self.env.action_space.shape[0], self.learning_rate)
+        self.target_q_network = QNetwork(args, self.env.observation_space.shape[0],
+            self.env.action_space.shape[0], self.learning_rate)
+        self.memory = Replay_Memory(self.env.observation_space.shape[0],
+            self.env.action_space.shape[0])
 
         # Plotting
         self.rewards = []
         self.td_error = []
         self.batch = list(range(32))
+
+        # Tensorboard
+        logdir = "logs/%s/%s" % (self.environment_name, datetime.now().strftime("%Y%m%d-%H%M%S"))
+        self.summary_writer = tf.summary.create_file_writer(logdir)
 
     def epsilon_greedy_policy(self, q_values, epsilon):
         # Creating epsilon greedy probabilities to sample from.             
@@ -162,15 +171,19 @@ class DQN_Agent():
         # transitions to memory, while also updating your model.
         counter = 0
         self.burn_in_memory()
-        while(self.num_episodes > counter):
+        while self.num_episodes > counter:
             # Generate Episodes using Epsilon Greedy Policy
-            self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=self.epsilon,frameskip=self.args.frameskip)
+            self.generate_episode(policy=self.epsilon_greedy_policy,
+                epsilon=self.epsilon, frameskip=self.args.frameskip)
             self.train_network(counter)
 
             if counter % 100 == 0:
                 test_reward, test_error = self.test(episodes=20)
                 self.rewards.append([test_reward, counter])
                 self.td_error.append([test_error, counter])
+                self.summary_writer.scalar('test/reward', test_reward, step=counter)
+                self.summary_writer.scalar('test/td_error', test_error, step=counter)
+
             if counter % self.network_update_freq == 0:
                 self.hard_update()
             counter += 1 
@@ -183,46 +196,57 @@ class DQN_Agent():
             if counter % int(self.num_episodes / 3) == 0 and self.args.render:
                 test_video(self, self.environment_name, counter)
 
-        self.plots()
+        # Replaced with tensorboard logs
+        # self.plots()
 
     def train_network(self, counter):
         state, action, rewards, next_state, done = self.memory.sample_batch(batch_size=32)
-        # pdb.set_trace()
         # y = r + gamma * (1 - done) * max(q(s,a))
-        _y = rewards + self.discount_factor*np.multiply((1 - done),np.amax(self.target_q_network.model.predict_on_batch(next_state), axis=1, keepdims=True))
+        _y = rewards + self.discount_factor * np.multiply((1 - done),
+            np.amax(self.target_q_network.model.predict_on_batch(next_state), axis=1, keepdims=True))
         y = self.q_network.model.predict_on_batch(state)
-        y[self.batch,action.squeeze().astype(int)] = _y.squeeze()
+        y[self.batch, action.squeeze().astype(int)] = _y.squeeze()
 
         # Network Input - S | Output - Q(S,A) | Error - (Y - Q(S,A))^2
         history = self.q_network.model.fit(state, y, epochs=1, batch_size=32, verbose=False)
+
+        # Logging
         loss = history.history['loss'][-1]
         acc = history.history['acc'][-1]
-        if (counter + 1) % 100 == 0:
-            print("Iter {} | Loss {}".format(counter, loss))
+        if (counter + 1) % 100 == 0: print("Iter {} | Loss {}".format(counter, loss))
+        if counter % self.tensorboard_freq == 0:
+        self.summary_writer.scalar('train/loss', loss, step=counter)
+        self.summary_writer.scalar('train/accuracy', acc, step=counter)
 
     def hard_update(self):
         self.target_q_network.model.set_weights(self.q_network.model.get_weights())
 
     def test(self, model_file=None, episodes=100):
-        # Evaluate the performance of your agent over 100 episodes, by calculating cummulative rewards for the 100 episodes.
+        # Evaluate the performance of your agent over 100 episodes
+        # by calculating cummulative rewards for the 100 episodes.
         # Here you need to interact with the environment, irrespective of whether you are using a memory. 
         count = 0
         cum_reward = []
         td_error = []
+
         while(count < episodes):
-            reward, error = self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=0.05, test=True, frameskip=self.args.frameskip)
+            reward, error = self.generate_episode(policy=self.epsilon_greedy_policy,
+                epsilon=0.05, test=True, frameskip=self.args.frameskip)
             cum_reward.append(reward)
             td_error.append(error)
             count += 1
+
         cum_reward = np.array(cum_reward)
         td_error = np.array(td_error)
+
         print("Test rewards : {}".format(np.mean(cum_reward)))
         return np.mean(cum_reward), np.mean(td_error)
 
     def burn_in_memory(self):
         # Initialize your replay memory with a burn_in number of episodes / transitions. 
         while not self.memory.burned_in:
-            self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=self.epsilon, frameskip=self.args.frameskip)
+            self.generate_episode(policy=self.epsilon_greedy_policy,
+                epsilon=self.epsilon, frameskip=self.args.frameskip)
         print("Burn Complete!")
 
     def generate_episode(self, policy, epsilon, test=False, frameskip=1):
@@ -234,6 +258,7 @@ class DQN_Agent():
         rewards = 0
         q_values = self.q_network.model.predict(state.reshape(1,-1))
         td_error = []
+
         while not done:
             action = policy(q_values, epsilon)
             i = 0
@@ -246,7 +271,7 @@ class DQN_Agent():
             if not test:
                 self.memory.append(state, action, reward, next_state, done)
             else:
-                td_error.append(abs(reward + self.discount_factor*(1-done)*np.max(next_q_values) - q_values))
+                td_error.append(abs(reward + self.discount_factor * (1 - done) * np.max(next_q_values) - q_values))
 
             if not done:
                 state = copy.deepcopy(next_state)
@@ -279,7 +304,7 @@ class DQN_Agent():
         plt.show()
 
     def epsilon_decay(self, initial_eps=1.0, final_eps=0.05):
-        if(self.epsilon > final_eps):
+        if self.epsilon > final_eps:
             factor = (initial_eps - final_eps) / 10000
             self.epsilon -= factor
 
@@ -316,13 +341,13 @@ def test_video(agent, env_name, epi):
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
-    parser.add_argument('--env',dest='env',type=str)
-    parser.add_argument('--render',dest='render',type=bool,default=False)
-    parser.add_argument('--train',dest='train',type=int,default=1)
-    parser.add_argument('--frameskip',dest='frameskip',type=int,default=1)
-    parser.add_argument('--update_freq',dest='network_update_freq',type=int,default=10)
-    parser.add_argument('--epsilon',dest='epsilon',type=float,default=1.0)
-    parser.add_argument('--model',dest='model_file',type=str)
+    parser.add_argument('--env', dest='env', type=str)
+    parser.add_argument('--render', dest='render', type=bool, default=False)
+    parser.add_argument('--train', dest='train', type=int, default=1)
+    parser.add_argument('--frameskip', dest='frameskip', type=int, default=1)
+    parser.add_argument('--update_freq', dest='network_update_freq', type=int, default=10)
+    parser.add_argument('--epsilon', dest='epsilon', type=float, default=1.0)
+    parser.add_argument('--model', dest='model_file', type=str)
     return parser.parse_args()
 
 
@@ -341,6 +366,7 @@ def main(args):
     # You want to create an instance of the DQN_Agent class here, and then train / test it. 
     q_agent = DQN_Agent(args)
     q_agent.train()
+
 
 if __name__ == '__main__':
     main(sys.argv)
