@@ -39,6 +39,7 @@ class QNetwork():
             self.model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])
             # self.model.compile(loss='mean_squared_error', optimizer=tf.train.AdamOptimizer(), metrics=['accuracy'])
         else:
+            print('Loading pretrained model from', args.model_file)
             self.load_model_weights(args.model_file)
 
     def save_model_weights(self, step):
@@ -151,13 +152,13 @@ class DQN_Agent():
         self.td_error = []
         self.batch = list(range(32))
 
-        # Tensorboard
-        self.logdir = 'logs/%s/%s' % (self.environment_name, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-        self.summary_writer = SummaryWriter(self.logdir)
+        # # Tensorboard
+        # self.logdir = 'logs/%s/%s' % (self.environment_name, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        # self.summary_writer = SummaryWriter(self.logdir)
 
-        # Save hyperparameters
-        with open(self.logdir + '/hyperparameters.json', 'w') as outfile:
-            json.dump(vars(self.args), outfile, indent=4)
+        # # Save hyperparameters
+        # with open(self.logdir + '/hyperparameters.json', 'w') as outfile:
+        #     json.dump(vars(self.args), outfile, indent=4)
 
     def epsilon_greedy_policy(self, q_values, epsilon):
         # Creating epsilon greedy probabilities to sample from.             
@@ -323,7 +324,7 @@ def test_video(agent, env_name, episodes):
     #   you can pass the arguments within agent.train() as:
     #       if episode % int(self.num_episodes/3) == 0:
     #           test_video(self, self.environment_name, episode)
-    save_path = os.path.join(self.logdir + "video-%s" % (episodes))
+    save_path = "%s/video-%s" % (env_name, episodes)
     if not os.path.exists(save_path): os.makedirs(save_path)
 
     # To create video
@@ -333,18 +334,17 @@ def test_video(agent, env_name, episodes):
     done = False
     print("Video recording the agent with epsilon {0:.4f}".format(agent.epsilon))
     while not done:
-        env.render()
         q_values = agent.q_network.model.predict(state.reshape(1, -1))
         action = agent.greedy_policy(q_values)
-        # action = agent.epsilon_greedy_policy(q_values, agent.epsilon)
         i = 0
         while (i < agent.args.frameskip) and not done:
-            next_state, reward, done, info = agent.env.step(action)
+            env.render()
+            next_state, reward, done, info = env.step(action)
             reward_total.append(reward)
             i += 1
         state = next_state
     print("reward_total: {}".format(np.sum(reward_total)))
-    agent.env.close()
+    env.close()
 
 
 def parse_arguments():
@@ -367,14 +367,13 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
-    environment_name = args.env
 
-    # Setting the session to allow growth, so it doesn't allocate all GPU memory. 
+    # Setting the session to allow growth, so it doesn't allocate all GPU memory.
     gpu_ops = tf.GPUOptions(allow_growth=True)
     config = tf.ConfigProto(gpu_options=gpu_ops)
     sess = tf.Session(config=config)
 
-    # Setting this as the default tensorflow session. 
+    # Setting this as the default tensorflow session.
     keras.backend.tensorflow_backend.set_session(sess)
 
     # You want to create an instance of the DQN_Agent class here, and then train / test it. 
@@ -382,5 +381,23 @@ def main():
     q_agent.train()
 
 
+def generate_video(model_file, step):
+    args = parse_arguments()
+
+    # Setting the session to allow growth, so it doesn't allocate all GPU memory.
+    gpu_ops = tf.GPUOptions(allow_growth=True)
+    config = tf.ConfigProto(gpu_options=gpu_ops)
+    sess = tf.Session(config=config)
+
+    # Setting this as the default tensorflow session.
+    keras.backend.tensorflow_backend.set_session(sess)
+
+    # You want to create an instance of the DQN_Agent class here, and then train / test it. 
+    args.model_file = model_file
+    q_agent = DQN_Agent(args)
+    test_video(q_agent, args.env, step)
+
 if __name__ == '__main__':
-    main()
+    # main()
+    # generate_video('models/CartPole-v0/2019-10-02_15-17-51/model_4998.h5')
+    generate_video('models/MountainCar-v0/2019-10-02_13-21-10/model_3333.h5', 3333)
