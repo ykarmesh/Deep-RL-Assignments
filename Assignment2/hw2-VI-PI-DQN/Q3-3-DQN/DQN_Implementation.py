@@ -5,7 +5,7 @@ import pdb
 import sys
 import copy
 import argparse
-import datetime
+from datetime import datetime
 
 import gym
 import keras
@@ -13,6 +13,10 @@ import numpy as np
 import tensorflow as tf
 from keras.layers import Dense
 import matplotlib.pyplot as plt
+from tensorboardX import SummaryWriter
+
+# TensorFlow log level.
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 class QNetwork():
@@ -147,7 +151,7 @@ class DQN_Agent():
 
         # Tensorboard
         logdir = "logs/%s/%s" % (self.environment_name, datetime.now().strftime("%Y%m%d-%H%M%S"))
-        self.summary_writer = tf.summary.create_file_writer(logdir)
+        self.summary_writer = SummaryWriter(logdir)
 
     def epsilon_greedy_policy(self, q_values, epsilon):
         # Creating epsilon greedy probabilities to sample from.             
@@ -181,8 +185,8 @@ class DQN_Agent():
                 test_reward, test_error = self.test(episodes=20)
                 self.rewards.append([test_reward, counter])
                 self.td_error.append([test_error, counter])
-                self.summary_writer.scalar('test/reward', test_reward, step=counter)
-                self.summary_writer.scalar('test/td_error', test_error, step=counter)
+                self.summary_writer.add_scalar('test/reward', test_reward, counter)
+                self.summary_writer.add_scalar('test/td_error', test_error, counter)
 
             if counter % self.network_update_freq == 0:
                 self.hard_update()
@@ -209,8 +213,8 @@ class DQN_Agent():
         acc = history.history['acc'][-1]
         if (counter + 1) % 100 == 0: print("Iter {} | Loss {}".format(counter, loss))
         if counter % self.log_freq == 0:
-            self.summary_writer.scalar('train/loss', loss, step=counter)
-            self.summary_writer.scalar('train/accuracy', acc, step=counter)
+            self.summary_writer.add_scalar('train/loss', loss, counter)
+            self.summary_writer.add_scalar('train/accuracy', acc, counter)
 
     def hard_update(self):
         self.target_q_network.model.set_weights(self.q_network.model.get_weights())
@@ -341,7 +345,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main(args):
+def main():
     args = parse_arguments()
     environment_name = args.env
 
@@ -359,4 +363,4 @@ def main(args):
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
