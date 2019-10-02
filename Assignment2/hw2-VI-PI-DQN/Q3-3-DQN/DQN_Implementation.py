@@ -4,6 +4,7 @@ import os
 import pdb
 import sys
 import copy
+import json
 import argparse
 from datetime import datetime
 
@@ -143,7 +144,7 @@ class DQN_Agent():
         # Other Classes
         self.q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0], self.learning_rate)
         self.target_q_network = QNetwork(args, self.env.observation_space.shape[0], self.env.action_space.shape[0], self.learning_rate)
-        self.memory = Replay_Memory( self.env.observation_space.shape[0], self.env.action_space.shape[0], memory_size=self.args.memory_size)
+        self.memory = Replay_Memory(self.env.observation_space.shape[0], self.env.action_space.shape[0], memory_size=self.args.memory_size)
 
         # Plotting
         self.rewards = []
@@ -151,8 +152,12 @@ class DQN_Agent():
         self.batch = list(range(32))
 
         # Tensorboard
-        self.logdir = "logs/%s/%s" % (self.environment_name, datetime.now().strftime("%Y%m%d-%H%M%S"))
+        self.logdir = 'logs/%s/%s' % (self.environment_name, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
         self.summary_writer = SummaryWriter(self.logdir)
+
+        # Save hyperparameters
+        with open(self.logdir + '/hyperparameters.json', 'w') as outfile:
+            json.dump(vars(self.args), outfile, indent=4)
 
     def epsilon_greedy_policy(self, q_values, epsilon):
         # Creating epsilon greedy probabilities to sample from.             
@@ -168,7 +173,7 @@ class DQN_Agent():
     def train(self):
         # In this function, we will train our network. 
         # If training without experience replay_memory, then you will interact with the environment 
-        # in this function, while also updating your network parameters. 
+        # in this function, while also updating your network parameters.
 
         # When use replay memory, you should interact with environment here, and store these 
         # transitions to memory, while also updating your model.
@@ -180,7 +185,7 @@ class DQN_Agent():
 
             # Train the network.
             for i in range(self.number_of_updates):
-                self.train_network(step)
+                loss, acc = self.train_network(step)
 
             # Test the network.
             if step % self.test_freq == 0:
@@ -194,6 +199,12 @@ class DQN_Agent():
             if step % self.network_update_freq == 0:
                 self.hard_update()
 
+            # Logging.
+            if step % self.log_freq == 0:
+                print("Step: {0:05d}/{1:05d} | Loss: {2:.4f}".format(step, self.num_episodes, loss))
+                self.summary_writer.add_scalar('train/loss', loss, step)
+                self.summary_writer.add_scalar('train/accuracy', acc, step)
+
             # Save the model.
             if step % self.save_freq == 0:
                 self.q_network.save_model_weights(step)
@@ -206,6 +217,7 @@ class DQN_Agent():
                 # test_video(self, self.environment_name, step)
                 self.q_network.save_model_weights(step)
 
+        self.summary_writer.export_scalars_to_json(os.path.join(self.logdir, 'all_scalars.json'))
         self.summary_writer.close()
 
     def train_network(self, step):
@@ -215,18 +227,13 @@ class DQN_Agent():
         # y = r + gamma * (1 - done) * max(q(s,a))
         _y = rewards + self.discount_factor*np.multiply((1 - done),np.amax(self.target_q_network.model.predict_on_batch(next_state), axis=1, keepdims=True))
         y = self.q_network.model.predict_on_batch(state)
-        y[self.batch,action.squeeze().astype(int)] = _y.squeeze()
+        y[self.batch, action.squeeze().astype(int)] = _y.squeeze()
 
         # Network Input - S | Output - Q(S,A) | Error - (Y - Q(S,A))^2
         history = self.q_network.model.fit(state, y, epochs=1, batch_size=32, verbose=False)
-
-        # Logging
         loss = history.history['loss'][-1]
         acc = history.history['acc'][-1]
-        if step % 100 == 0: print("Step: {0}/{1} | Loss: {2:.4f}".format(step, self.num_episodes, loss))
-        if step % self.log_freq == 0:
-            self.summary_writer.add_scalar('train/loss', loss, step)
-            self.summary_writer.add_scalar('train/accuracy', acc, step)
+        return loss, acc
 
     def hard_update(self):
         self.target_q_network.model.set_weights(self.q_network.model.get_weights())
@@ -242,7 +249,7 @@ class DQN_Agent():
             td_error.append(error)
         cum_reward = np.array(cum_reward)
         td_error = np.array(td_error)
-        print("Test rewards : {}".format(np.mean(cum_reward)))
+        print("\nTest Rewards: {0} | TD Error: {1:.4f}\n".format(np.mean(cum_reward), np.mean(td_error)))
         return np.mean(cum_reward), np.mean(td_error)
 
     def burn_in_memory(self):
@@ -347,7 +354,7 @@ def parse_arguments():
     parser.add_argument('--train', dest='train', type=int, default=1)
     parser.add_argument('--frameskip', dest='frameskip', type=int, default=1)
     parser.add_argument('--update_freq', dest='network_update_freq', type=int, default=10)
-    parser.add_argument('--log_freq', dest='log_freq', type=int, default=50)
+    parser.add_argument('--log_freq', dest='log_freq', type=int, default=25)
     parser.add_argument('--test_freq', dest='test_freq', type=int, default=100)
     parser.add_argument('--save_freq', dest='save_freq', type=int, default=500)
     parser.add_argument('--lr', dest='learning_rate', type=float, default=0.001)
