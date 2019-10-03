@@ -280,7 +280,7 @@ def policy_iteration_sync(env, gamma, max_iterations=int(1e3), tol=1e-3):
       value_func, i = evaluate_policy_sync(env, gamma, policy)
       value_iters += i
       policy_stable, policy = improve_policy(env, gamma, value_func, policy)
-      policy_iters += env.nS
+      policy_iters += 1
       # pdb.set_trace()
       print("iters {} | policy eval {} | policy improvement {}".format(iters, value_iters, policy_iters))
     display_policy_letters(env, policy)
@@ -325,7 +325,7 @@ def policy_iteration_async_ordered(env, gamma, max_iterations=int(1e3),
       value_func, i = evaluate_policy_async_ordered(env, gamma, policy)
       value_iters += i
       policy_stable, policy = improve_policy(env, gamma, value_func, policy)
-      policy_iters += env.nS
+      policy_iters += 1
       # pdb.set_trace()
       print("iters {} | policy eval {} | policy improvement {}".format(iters, value_iters, policy_iters))
     display_policy_letters(env, policy)
@@ -370,7 +370,7 @@ def policy_iteration_async_randperm(env, gamma, max_iterations=int(1e3),
       value_func, i = evaluate_policy_async_randperm(env, gamma, policy)
       value_iters += i
       policy_stable, policy = improve_policy(env, gamma, value_func, policy)
-      policy_iters += env.nS
+      policy_iters += 1
       # pdb.set_trace()
       print("iters {} | policy eval {} | policy improvement {}".format(iters, value_iters, policy_iters))
     display_policy_letters(env, policy)
