@@ -5,6 +5,6 @@ python3 DQN_Implementation.py \
     --render \
     --memory_size 100000 \
     --frameskip 20 \
-    --nos_updates 50 \
     --update_freq 1 \
-    --lr 0.001
+    --lr 0.0001 \
+    --double_dqn 1

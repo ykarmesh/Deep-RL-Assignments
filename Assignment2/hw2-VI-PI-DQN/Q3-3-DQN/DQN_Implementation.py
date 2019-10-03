@@ -30,14 +30,16 @@ class QNetwork():
         # and optimizers here, initialize your variables, or alternately compile your model here.  
         self.weights_path = 'models/%s/%s' % (args.env, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
         if args.model_file is None:
+            # Network architecture.
             self.model = keras.models.Sequential()      
             self.model.add(Dense(128, activation='relu', input_dim=input, kernel_initializer=keras.initializers.VarianceScaling(scale=2.0)))
             self.model.add(Dense(128, activation='relu', kernel_initializer=keras.initializers.VarianceScaling(scale=2.0)))
             self.model.add(Dense(128, activation='relu', kernel_initializer=keras.initializers.VarianceScaling(scale=2.0)))
             self.model.add(Dense(output, activation='linear', kernel_initializer=keras.initializers.VarianceScaling(scale=2.0)))
+
+            # Loss and optimizer.
             adam = keras.optimizers.Adam(lr=learning_rate)
             self.model.compile(loss='mean_squared_error', optimizer=adam, metrics=['accuracy'])
-            # self.model.compile(loss='mean_squared_error', optimizer=tf.train.AdamOptimizer(), metrics=['accuracy'])
         else:
             print('Loading pretrained model from', args.model_file)
             self.load_model_weights(args.model_file)
@@ -127,7 +129,6 @@ class DQN_Agent():
         self.log_freq = args.log_freq
         self.test_freq = args.test_freq
         self.save_freq = args.save_freq
-        self.number_of_updates = self.args.nos_updates
         self.learning_rate = self.args.learning_rate
 
         # Env related variables
@@ -152,13 +153,13 @@ class DQN_Agent():
         self.td_error = []
         self.batch = list(range(32))
 
-        # # Tensorboard
-        # self.logdir = 'logs/%s/%s' % (self.environment_name, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-        # self.summary_writer = SummaryWriter(self.logdir)
+        # Tensorboard
+        self.logdir = 'logs/%s/%s' % (self.environment_name, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+        self.summary_writer = SummaryWriter(self.logdir)
 
-        # # Save hyperparameters
-        # with open(self.logdir + '/hyperparameters.json', 'w') as outfile:
-        #     json.dump(vars(self.args), outfile, indent=4)
+        # Save hyperparameters
+        with open(self.logdir + '/hyperparameters.json', 'w') as outfile:
+            json.dump(vars(self.args), outfile, indent=4)
 
     def epsilon_greedy_policy(self, q_values, epsilon):
         # Creating epsilon greedy probabilities to sample from.             
@@ -180,13 +181,9 @@ class DQN_Agent():
         # transitions to memory, while also updating your model.
         self.burn_in_memory()
         for step in range(self.num_episodes):
-            # Generate Episodes using Epsilon Greedy Policy
-            self.generate_episode(policy=self.epsilon_greedy_policy,
-                epsilon=self.epsilon,frameskip=self.args.frameskip)
-
-            # Train the network.
-            for i in range(self.number_of_updates):
-                loss, acc = self.train_network(step)
+            # Generate Episodes using Epsilon Greedy Policy and train the Q network.
+            self.generate_episode(policy=self.epsilon_greedy_policy, mode='train',
+                epsilon=self.epsilon, frameskip=self.args.frameskip)
 
             # Test the network.
             if step % self.test_freq == 0:
@@ -196,15 +193,13 @@ class DQN_Agent():
                 self.summary_writer.add_scalar('test/reward', test_reward, step)
                 self.summary_writer.add_scalar('test/td_error', test_error, step)
 
-            # Update the network.
+            # Update the target network.
             if step % self.network_update_freq == 0:
                 self.hard_update()
 
             # Logging.
             if step % self.log_freq == 0:
-                print("Step: {0:05d}/{1:05d} | Loss: {2:.4f}".format(step, self.num_episodes, loss))
-                self.summary_writer.add_scalar('train/loss', loss, step)
-                self.summary_writer.add_scalar('train/accuracy', acc, step)
+                print("Step: {0:05d}/{1:05d}".format(step, self.num_episodes))
 
             # Save the model.
             if step % self.save_freq == 0:
@@ -213,7 +208,7 @@ class DQN_Agent():
             step += 1
             self.epsilon_decay()
 
-            # Render and save the video.
+            # Render and save the video with the model.
             if step % int(self.num_episodes / 3) == 0 and self.args.render:
                 # test_video(self, self.environment_name, step)
                 self.q_network.save_model_weights(step)
@@ -221,12 +216,38 @@ class DQN_Agent():
         self.summary_writer.export_scalars_to_json(os.path.join(self.logdir, 'all_scalars.json'))
         self.summary_writer.close()
 
-    def train_network(self, step):
+    def train_dqn(self):
+        # Sample from the replay buffer.
         state, action, rewards, next_state, done = self.memory.sample_batch(batch_size=32)
-        # if np.any(done == 1):
-        #   pdb.set_trace()
-        # y = r + gamma * (1 - done) * max(q(s,a))
-        _y = rewards + self.discount_factor*np.multiply((1 - done),np.amax(self.target_q_network.model.predict_on_batch(next_state), axis=1, keepdims=True))
+
+        # Compute the target Q-value for the loss.
+        _y = rewards + self.discount_factor * np.multiply((1 - done),
+            np.amax(self.target_q_network.model.predict_on_batch(next_state), axis=1, keepdims=True))
+
+        # Replace the non-optimal actions with the predictions using the
+        # old states so that it doesn't contribute to the loss.
+        y = self.q_network.model.predict_on_batch(state)
+        y[self.batch, action.squeeze().astype(int)] = _y.squeeze()
+
+        # Network Input - S | Output - Q(S,A) | Error - (Y - Q(S,A))^2
+        history = self.q_network.model.fit(state, y, epochs=1, batch_size=32, verbose=False)
+        loss = history.history['loss'][-1]
+        acc = history.history['acc'][-1]
+        return loss, acc
+
+    def train_double_dqn(self):
+        # Sample from the replay buffer.
+        state, action, rewards, next_state, done = self.memory.sample_batch(batch_size=32)
+
+        # Pick the next best action from the Q network.
+        next_action = np.argmax(self.q_network.model.predict_on_batch(next_state), axis=1)
+
+        # Compute the target Q-value for the loss.
+        _y = rewards + self.discount_factor * np.multiply((1 - done),
+            self.target_q_network.model.predict_on_batch(next_state)[self.batch, next_action].reshape(-1, 1))
+
+        # Replace the non-optimal actions with the predictions using the
+        # old states so that it doesn't contribute to the loss.
         y = self.q_network.model.predict_on_batch(state)
         y[self.batch, action.squeeze().astype(int)] = _y.squeeze()
 
@@ -245,7 +266,8 @@ class DQN_Agent():
         cum_reward = []
         td_error = []
         for count in range(episodes):
-            reward, error = self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=0.05, test=True, frameskip=self.args.frameskip)
+            reward, error = self.generate_episode(policy=self.epsilon_greedy_policy,
+                mode='test', epsilon=0.05, frameskip=self.args.frameskip)
             cum_reward.append(reward)
             td_error.append(error)
         cum_reward = np.array(cum_reward)
@@ -256,10 +278,11 @@ class DQN_Agent():
     def burn_in_memory(self):
         # Initialize your replay memory with a burn_in number of episodes / transitions. 
         while not self.memory.burned_in:
-            self.generate_episode(policy=self.epsilon_greedy_policy, epsilon=self.epsilon, frameskip=self.args.frameskip)
+            self.generate_episode(policy=self.epsilon_greedy_policy, mode='burn_in',
+                epsilon=self.epsilon, frameskip=self.args.frameskip)
         print("Burn Complete!")
 
-    def generate_episode(self, policy, epsilon, test=False, frameskip=1):
+    def generate_episode(self, policy, epsilon, mode='train', frameskip=1):
         """
         Collects one rollout from the policy in an environment.
         """
@@ -276,15 +299,19 @@ class DQN_Agent():
                 rewards += reward
                 i += 1
             next_q_values = self.q_network.model.predict(next_state.reshape(1, -1))
-            if not test:
+            if mode in ['train', 'burn_in'] :
                 self.memory.append(state, action, reward, next_state, done)
             else:
                 td_error.append(abs(reward + self.discount_factor * (1 - done) * np.max(next_q_values) - q_values))
             if not done:
                 state = copy.deepcopy(next_state)
                 q_values = copy.deepcopy(next_q_values)
-        # if rewards > -200/self.args.frameskip:
-        #   print(rewards)
+
+            # Train the network.
+            if mode == 'train':
+                if self.args.double_dqn: self.train_double_dqn()
+                else: self.train_dqn()
+
         return rewards, np.mean(td_error)
 
     def plots(self):
@@ -352,13 +379,13 @@ def parse_arguments():
     parser.add_argument('--env', dest='env', type=str)
     parser.add_argument('--render', dest='render',  action="store_true", default=False)
     parser.add_argument('--train', dest='train', type=int, default=1)
+    parser.add_argument('--double_dqn', dest='double_dqn', type=int, default=0)
     parser.add_argument('--frameskip', dest='frameskip', type=int, default=1)
     parser.add_argument('--update_freq', dest='network_update_freq', type=int, default=10)
     parser.add_argument('--log_freq', dest='log_freq', type=int, default=25)
     parser.add_argument('--test_freq', dest='test_freq', type=int, default=100)
     parser.add_argument('--save_freq', dest='save_freq', type=int, default=500)
     parser.add_argument('--lr', dest='learning_rate', type=float, default=0.001)
-    parser.add_argument('--nos_updates', dest='nos_updates', type=int, default=1)
     parser.add_argument('--memory_size', dest='memory_size', type=int, default=50000)
     parser.add_argument('--epsilon', dest='epsilon', type=float, default=1.0)
     parser.add_argument('--model', dest='model_file', type=str)
@@ -397,7 +424,8 @@ def generate_video(model_file, step):
     q_agent = DQN_Agent(args)
     test_video(q_agent, args.env, step)
 
+
 if __name__ == '__main__':
-    # main()
-    # generate_video('models/CartPole-v0/2019-10-02_15-17-51/model_4998.h5')
-    generate_video('models/MountainCar-v0/2019-10-02_13-21-10/model_3333.h5', 3333)
+    main()
+    # generate_video('models/CartPole-v0/2019-10-02_18-40-22/model_0.h5', 0)
+    # generate_video('models/MountainCar-v0/2019-10-02_13-21-10/model_9999.h5', 9999)
