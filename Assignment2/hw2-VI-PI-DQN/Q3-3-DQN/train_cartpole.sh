@@ -3,9 +3,9 @@
 python3 DQN_Implementation.py \
     --env CartPole-v0 \
     --render \
-    --memory_size 50000 \
+    --memory_size 100000 \
     --frameskip 1 \
-    --nos_updates 10 \
-    --update_freq 10 \
-    --lr 0.0001 \
-    --epsilon 0.5
+    --update_freq 1 \
+    --lr 5e-5 \
+    --epsilon 0.5 \
+    --double_dqn 1
