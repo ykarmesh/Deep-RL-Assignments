@@ -7,6 +7,7 @@ import deeprl_hw2q2.lake_envs as lake_env
 import pdb
 import matplotlib.pyplot as plt
 import seaborn as sns
+import gym
 
 
 def print_policy(policy, action_names):
@@ -55,6 +56,8 @@ def value_function_to_policy(env, gamma, value_func):
       for action in range(env.nA):
         value = 0
         for prob, nextstate, reward, is_terminal in env.P[state][action]:
+          prob = env.T[state, action, nextstate]
+          reward = env.R[state, action, nextstate]
           value += prob*(reward + gamma*(1-int(is_terminal))*value_func[nextstate])
         if max_value < value:
           max_value = value
@@ -101,11 +104,13 @@ def evaluate_policy_sync(env, gamma, policy, max_iterations=int(1e3), tol=1e-3):
         # Iterate over all the future states
         new_value = 0
         for prob, nextstate, reward, is_terminal in env.P[state][action]:
-          new_value += prob*(reward + gamma*(1-int(is_terminal))*next_value_func[nextstate])
+          prob = env.T[state, action, nextstate]
+          reward = env.R[state, action, nextstate]
+          new_value += prob*(reward + gamma*(1-int(is_terminal))*value_func[nextstate])
         
         delta[state] = max(delta[state], abs(next_value_func[state] - new_value))
-        value_func[state] = new_value
-      next_value_func = value_func
+        next_value_func[state] = new_value
+      value_func = next_value_func.copy()
       iters += 1
     return value_func, iters
 
@@ -147,6 +152,8 @@ def evaluate_policy_async_ordered(env, gamma, policy, max_iterations=int(1e3), t
         # Iterate over all the future states
         new_value = 0
         for prob, nextstate, reward, is_terminal in env.P[state][action]:
+          prob = env.T[state, action, nextstate]
+          reward = env.R[state, action, nextstate]
           new_value += prob*(reward + gamma*(1-int(is_terminal))*value_func[nextstate])
         
         delta[state] = max(delta[state], abs(value_func[state] - new_value))
@@ -194,6 +201,8 @@ def evaluate_policy_async_randperm(env, gamma, policy, max_iterations=int(1e3), 
         # Iterate over all the future states
         new_value = 0
         for prob, nextstate, reward, is_terminal in env.P[state][action]:
+          prob = env.T[state, action, nextstate]
+          reward = env.R[state, action, nextstate]
           new_value += prob*(reward + gamma*(1-int(is_terminal))*value_func[nextstate])
         
         delta[state] = max(delta[state], abs(value_func[state] - new_value))
@@ -231,6 +240,8 @@ def improve_policy(env, gamma, value_func, policy):
       for action in range(env.nA):
         value = 0
         for prob, nextstate, reward, is_terminal in env.P[state][action]:
+          prob = env.T[state, action, nextstate]
+          reward = env.R[state, action, nextstate]
           value += prob*(reward + gamma*(1-int(is_terminal))*value_func[nextstate])
         if max_value < value:
           max_value = value
@@ -411,14 +422,16 @@ def value_iteration_sync(env, gamma, max_iterations=int(1e3), tol=1e-3):
           # Iterate over all the future states
           new_value = 0
           for prob, nextstate, reward, is_terminal in env.P[state][action]:
-            new_value += prob*(reward + gamma*(1-int(is_terminal))*next_value_func[nextstate])
+            prob = env.T[state, action, nextstate]
+            reward = env.R[state, action, nextstate]
+            new_value += prob*(reward + gamma*(1-int(is_terminal))*value_func[nextstate])
 
           if max_value < new_value:
             max_value = new_value
 
-        delta[state] = max(delta[state], abs(next_value_func[state] - max_value))
-        value_func[state] = max_value
-      next_value_func = value_func
+        delta[state] = max(delta[state], abs(value_func[state] - max_value))
+        next_value_func[state] = max_value
+      value_func = next_value_func.copy()
       iters += 1
     print("Policy Evaluation Complete \n{}".format(value_func))
 
@@ -461,6 +474,8 @@ def value_iteration_async_ordered(env, gamma, max_iterations=int(1e3), tol=1e-3)
           # Iterate over all the future states
           new_value = 0
           for prob, nextstate, reward, is_terminal in env.P[state][action]:
+            prob = env.T[state, action, nextstate]
+            reward = env.R[state, action, nextstate]
             new_value += prob*(reward + gamma*(1-int(is_terminal))*value_func[nextstate])
 
           if max_value < new_value:
@@ -514,6 +529,8 @@ def value_iteration_async_randperm(env, gamma, max_iterations=int(1e3),
           # Iterate over all the future states
           new_value = 0
           for prob, nextstate, reward, is_terminal in env.P[state][action]:
+            prob = env.T[state, action, nextstate]
+            reward = env.R[state, action, nextstate]
             new_value += prob*(reward + gamma*(1-int(is_terminal))*value_func[nextstate])
 
           if max_value < new_value:

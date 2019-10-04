@@ -6,11 +6,11 @@ import gym
 import deeprl_hw2q2.lake_envs as lake_env
 import time
 from deeprl_hw2q2.rl import policy_iteration_sync, value_iteration_sync, policy_iteration_async_ordered, \
-    policy_iteration_async_randperm, value_iteration_async_ordered, value_iteration_async_randperm
+    policy_iteration_async_randperm, value_iteration_async_ordered, value_iteration_async_randperm, env_wrapper
 
 def main():
     # create the environment
-    env = gym.make('Deterministic-4x4-FrozenLake-v0')
+    env = env_wrapper('Deterministic-8x8-FrozenLake-v0')
     gamma = 0.9
     method = 'policy_iteration'
     policy_iters = None
