@@ -377,7 +377,7 @@ def test_video(agent, env_name, episodes):
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Deep Q Network Argument Parser')
     parser.add_argument('--env', dest='env', type=str)
-    parser.add_argument('--render', dest='render',  action="store_true", default=False)
+    parser.add_argument('--render', dest='render', action="store_true", default=False)
     parser.add_argument('--train', dest='train', type=int, default=1)
     parser.add_argument('--double_dqn', dest='double_dqn', type=int, default=0)
     parser.add_argument('--frameskip', dest='frameskip', type=int, default=1)
@@ -405,27 +405,11 @@ def main():
 
     # You want to create an instance of the DQN_Agent class here, and then train / test it. 
     q_agent = DQN_Agent(args)
-    q_agent.train()
 
-
-def generate_video(model_file, step):
-    args = parse_arguments()
-
-    # Setting the session to allow growth, so it doesn't allocate all GPU memory.
-    gpu_ops = tf.GPUOptions(allow_growth=True)
-    config = tf.ConfigProto(gpu_options=gpu_ops)
-    sess = tf.Session(config=config)
-
-    # Setting this as the default tensorflow session.
-    keras.backend.tensorflow_backend.set_session(sess)
-
-    # You want to create an instance of the DQN_Agent class here, and then train / test it. 
-    args.model_file = model_file
-    q_agent = DQN_Agent(args)
-    test_video(q_agent, args.env, step)
+    # Render output videos using the model loaded from file.
+    if args.render: test_video(q_agent, args.env, step)
+    else: q_agent.train()  # Train the model.
 
 
 if __name__ == '__main__':
     main()
-    # generate_video('models/CartPole-v0/2019-10-02_18-40-22/model_0.h5', 0)
-    # generate_video('models/MountainCar-v0/2019-10-02_13-21-10/model_9999.h5', 9999)
