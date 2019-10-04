@@ -1,4 +1,4 @@
-## README
+# 10-703 HW2 Problem 3
 
 ### DQN Implementation
 
