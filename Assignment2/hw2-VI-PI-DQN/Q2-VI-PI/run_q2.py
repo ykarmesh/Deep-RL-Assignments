@@ -3,16 +3,23 @@ from __future__ import (absolute_import, division, print_function,
 from builtins import input
 
 import gym
-import deeprl_hw2q2.lake_envs as lake_env
 import time
+import argparse
+
+import deeprl_hw2q2.lake_envs as lake_env
 from deeprl_hw2q2.rl import policy_iteration_sync, value_iteration_sync, policy_iteration_async_ordered, \
     policy_iteration_async_randperm, value_iteration_async_ordered, value_iteration_async_randperm, env_wrapper
 
 def main():
+    parser = argparse.ArgumentParser(description='Problem 2 Argument Parser')
+    parser.add_argument('--env', dest='env', type=str)
+    parser.add_argument('--method', dest='method', type=str)
+    args = parser.parse_args()
+
     # create the environment
-    env = env_wrapper('Deterministic-8x8-FrozenLake-v0')
+    env = env_wrapper(args.env)
     gamma = 0.9
-    method = 'policy_iteration'
+    method = args.method
     policy_iters = None
 
     if method == 'policy_iteration':
