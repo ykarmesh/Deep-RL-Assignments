@@ -102,11 +102,11 @@ class Reinforce():
         '''Trains the model on a single episode using REINFORCE.'''
         for epoch in range(self.args.num_episodes):
             # Generate epsiode data.
-            states, actions, returns, log_probs = self.generate_episode()
+            returns, log_probs = self.generate_episode()
 
             # Compute loss and policy gradient.
             self.optimizer.zero_grad()
-            loss = (returns * -log_probs).mean()  # Element wise multiplication.
+            loss = (returns * -log_probs).sum()  # Element wise multiplication.
             loss.backward()
             self.optimizer.step()
 
@@ -124,7 +124,7 @@ class Reinforce():
 
             # Logging.
             if epoch % self.args.log_interval == 0:
-                print('Epoch: {0:05d}/{1:05d}'.format(epoch, self.args.num_episodes))
+                print('Epoch: {0:05d}/{1:05d} | Loss: {2:.3f}'.format(epoch, self.args.num_episodes, loss))
                 self.summary_writer.add_scalar('train/loss', loss, epoch)
 
             # Save the model.
@@ -132,6 +132,7 @@ class Reinforce():
                 self.save_model(epoch)
 
         self.summary_writer.close()
+        self.plot()
 
     def generate_episode(self, gamma=0.99, test=False, render=False):
         '''
@@ -179,7 +180,11 @@ class Reinforce():
         mean_return, std_return = returns.mean(), returns.std()
         returns = (returns - mean_return) / (std_return + self.eps)
 
-        return torch.stack(states), torch.stack(actions), returns, torch.stack(log_probs)
+        return returns, torch.stack(log_probs)
+
+    def plot(self):
+        # Make error plot with mean, std of rewards
+        pass
 
 
 def parse_arguments():
