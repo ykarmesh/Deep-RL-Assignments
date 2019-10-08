@@ -69,6 +69,7 @@ class Reinforce():
 
         # Video render mode.
         if args.render:
+            self.model.eval()
             self.generate_episode(render=True)
             self.plot()
             return
@@ -99,14 +100,14 @@ class Reinforce():
 
     def load_model(self):
         '''Helper function to load model state and weights. '''
-        if os.path.isfile(self.weights_path):
-            print('=> Loading checkpoint', self.weights_path)
-            self.checkpoint = torch.load(self.weights_path)
+        if os.path.isfile(self.args.weights_path):
+            print('=> Loading checkpoint', self.args.weights_path)
+            self.checkpoint = torch.load(self.args.weights_path)
             self.model.load_state_dict(self.checkpoint['state_dict'])
             self.optimizer.load_state_dict(self.checkpoint['optimizer'])
             self.rewards_data = self.checkpoint['rewards_data']
         else:
-            raise Exception('No checkpoint found at %s' % self.weights_path)
+            raise Exception('No checkpoint found at %s' % self.args.weights_path)
 
     def train(self):
         '''Trains the model on a single episode using REINFORCE.'''
@@ -144,7 +145,7 @@ class Reinforce():
         self.summary_writer.close()
         self.plot()
 
-    def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=2000):
+    def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
         '''
         Generates an episode by executing the current policy in the given env.
         Returns:
@@ -229,7 +230,7 @@ def parse_arguments():
     parser.add_argument('--log_interval', dest='log_interval', type=int,
                         default=50, help='Log interval.')
     parser.add_argument('--lr', dest='lr', type=float,
-                        default=5e-3, help='The learning rate.')
+                        default=5e-4, help='The learning rate.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
     parser_group = parser.add_mutually_exclusive_group(required=False)
@@ -248,7 +249,7 @@ def main():
 
     # Train the model using REINFORCE.
     reinforce = Reinforce(args, env='LunarLander-v2')
-    reinforce.train()
+    if not args.render: reinforce.train()
 
 
 if __name__ == '__main__':
