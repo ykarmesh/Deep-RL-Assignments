@@ -65,7 +65,7 @@ class Reinforce():
         self.model.to(self.device)
 
         # Data for plotting.
-        self.returns_data = []  # Epoch, mean(returns), std(returns)
+        self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
 
         if train:
             # Tensorboard logging.
@@ -85,7 +85,9 @@ class Reinforce():
         '''Helper function to save model state and weights.'''
         if not os.path.exists(self.weights_path): os.makedirs(self.weights_path)
         torch.save({'state_dict': self.model.state_dict(),
-                    'optimizer': self.optimizer.state_dict()},
+                    'optimizer': self.optimizer.state_dict(),
+                    'rewards_data': self.rewards_data,
+                    'epoch': epoch},
                     os.path.join(self.weights_path, 'model_%d.h5' % epoch))
 
     def load_model(self):
@@ -116,8 +118,8 @@ class Reinforce():
                 print('\nTesting')
                 rewards = [self.generate_episode(test=True) for epoch in range(self.args.test_episodes)]
                 rewards_mean, rewards_std = np.mean(rewards), np.std(rewards)
-                print('Test Rewards (Mean): %.3f | Test Rewards (Std): %.3f\n' % (rewards_mean,  rewards_std))
-                self.returns_data.append([epoch, rewards_mean, rewards_std])
+                print('Test Rewards (Mean): %.3f | Test Rewards (Std): %.3f\n' % (rewards_mean, rewards_std))
+                self.rewards_data.append([epoch, rewards_mean, rewards_std])
                 self.summary_writer.add_scalar('test/rewards_mean', rewards_mean, epoch)
                 self.summary_writer.add_scalar('test/rewards_std', rewards_std, epoch)
                 self.model.train()
