@@ -134,7 +134,7 @@ class Reinforce():
         self.summary_writer.close()
         self.plot()
 
-    def generate_episode(self, gamma=0.99, test=False, render=False):
+    def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=2000):
         '''
         Generates an episode by executing the current policy in the given env.
         Returns:
@@ -142,6 +142,7 @@ class Reinforce():
         - a list of actions, indexed by time epoch
         - a list of cumulative discounted returns, indexed by time epoch
         '''
+        iters = 0
         done = False
         state = self.env.reset()
 
@@ -163,6 +164,10 @@ class Reinforce():
             state, reward, done, info = self.env.step(action.cpu().numpy())
             rewards.append(reward)
 
+            # Break if the episode takes too long.
+            iters += 1
+            if iters > max_iters: break
+
         # Return cumulative rewards for test mode.
         if test: return np.sum(rewards)
 
@@ -180,7 +185,7 @@ class Reinforce():
         mean_return, std_return = returns.mean(), returns.std()
         returns = (returns - mean_return) / (std_return + self.eps)
 
-        return returns, torch.stack(log_probs)
+        return returns, torch.stack(log_probs[::-1])
 
     def plot(self):
         # Make error plot with mean, std of rewards
@@ -201,7 +206,7 @@ def parse_arguments():
     parser.add_argument('--log_interval', dest='log_interval', type=int,
                         default=50, help='Log interval.')
     parser.add_argument('--lr', dest='lr', type=float,
-                        default=5e-4, help='The learning rate.')
+                        default=5e-3, help='The learning rate.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
     parser_group = parser.add_mutually_exclusive_group(required=False)
