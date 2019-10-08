@@ -67,6 +67,13 @@ class Reinforce():
         # Data for plotting.
         self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
 
+        # Video render mode.
+        if args.render:
+            self.generate_episode(render=True)
+            self.plot()
+            return
+
+        # Network training mode.
         if train:
             # Tensorboard logging.
             self.logdir = 'logs/%s/%s' % (self.environment_name, self.timestamp)
@@ -94,11 +101,12 @@ class Reinforce():
         '''Helper function to load model state and weights. '''
         if os.path.isfile(self.weights_path):
             print('=> Loading checkpoint', self.weights_path)
-            checkpoint = torch.load(self.weights_path)
-            self.model.load_state_dict(checkpoint['state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.checkpoint = torch.load(self.weights_path)
+            self.model.load_state_dict(self.checkpoint['state_dict'])
+            self.optimizer.load_state_dict(self.checkpoint['optimizer'])
+            self.rewards_data = self.checkpoint['rewards_data']
         else:
-            print('=> No checkpoint found at', self.weights_path)
+            raise Exception('No checkpoint found at %s' % self.weights_path)
 
     def train(self):
         '''Trains the model on a single episode using REINFORCE.'''
@@ -148,6 +156,12 @@ class Reinforce():
         done = False
         state = self.env.reset()
 
+        # Set video save path if render enabled.
+        if render:
+            save_path = 'videos/%s/epoch-%s' % (self.environment_name, self.checkpoint['epoch'])
+            if not os.path.exists(save_path): os.makedirs(save_path)
+            monitor = gym.wrappers.Monitor(self.env, save_path, force=True)
+
         states = []
         rewards, returns = [], []
         actions, log_probs = [], []
@@ -163,12 +177,19 @@ class Reinforce():
             log_probs.append(action_probs[action])
 
             # Run simulation with current action to get new state and reward.
+            if render: monitor.render()
             state, reward, done, info = self.env.step(action.cpu().numpy())
             rewards.append(reward)
 
             # Break if the episode takes too long.
             iters += 1
             if iters > max_iters: break
+
+        # Save video and close rendering.
+        if render:
+            monitor.close()
+            print('\nCumulative Rewards:', np.sum(rewards))
+            return
 
         # Return cumulative rewards for test mode.
         if test: return np.sum(rewards)
