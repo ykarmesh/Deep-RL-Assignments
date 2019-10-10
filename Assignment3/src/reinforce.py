@@ -116,7 +116,6 @@ class Reinforce():
             returns, log_probs = self.generate_episode()
 
             # Compute loss and policy gradient.
-            self.model.train()
             self.optimizer.zero_grad()
             loss = (returns * -log_probs).sum()
             loss.backward()
@@ -148,6 +147,7 @@ class Reinforce():
             self.rewards_data.append([epoch, rewards_mean, rewards_std])
             self.summary_writer.add_scalar('test/rewards_mean', rewards_mean, epoch)
             self.summary_writer.add_scalar('test/rewards_std', rewards_std, epoch)
+        self.model.train()
 
     def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
         '''
@@ -171,10 +171,9 @@ class Reinforce():
         rewards, returns = [], []
         actions, log_probs = [], []
 
-        self.model.eval()
         while not done:
             # Run policy on current state to log probabilities of actions.
-            states.append(torch.tensor(state, device=self.device).unsqueeze(0))
+            states.append(torch.tensor(state, device=self.device).float().unsqueeze(0))
             action_probs = self.model.forward(states[-1]).squeeze(0)
 
             # Sample action from the log probabilities.
