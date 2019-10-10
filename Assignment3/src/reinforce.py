@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 
 class Model(torch.nn.Module):
     '''This class essentially defines the network architecture'''
-    def __init__(self, input_dim, output_dim, hidden_size=16):
+    def __init__(self, input_dim, output_dim, hidden_size=64):
         super(Model, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_size)
         # self.linear1_bn = nn.BatchNorm1d(hidden_size)
@@ -30,9 +30,9 @@ class Model(torch.nn.Module):
         self.output = nn.Linear(hidden_size, output_dim)
 
     def forward(self, x):
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
+        x = F.relu(self.linear1(x))  # self.linear1_bn()
+        x = F.relu(self.linear2(x))  # self.linear2_bn()
+        x = F.relu(self.linear3(x))  # self.linear3_bn()
         x = F.log_softmax(self.output(x), dim=1)
         return x
 
@@ -116,22 +116,15 @@ class Reinforce():
             returns, log_probs = self.generate_episode()
 
             # Compute loss and policy gradient.
+            self.model.train()
             self.optimizer.zero_grad()
-            loss = (returns * -log_probs).sum()  # Element wise multiplication.
+            loss = (returns * -log_probs).sum()
             loss.backward()
             self.optimizer.step()
 
             # Test the model.
             if epoch % self.args.test_interval == 0:
-                self.model.eval()
-                print('\nTesting')
-                rewards = [self.generate_episode(test=True) for epoch in range(self.args.test_episodes)]
-                rewards_mean, rewards_std = np.mean(rewards), np.std(rewards)
-                print('Test Rewards (Mean): %.3f | Test Rewards (Std): %.3f\n' % (rewards_mean, rewards_std))
-                self.rewards_data.append([epoch, rewards_mean, rewards_std])
-                self.summary_writer.add_scalar('test/rewards_mean', rewards_mean, epoch)
-                self.summary_writer.add_scalar('test/rewards_std', rewards_std, epoch)
-                self.model.train()
+                self.test(epoch)
 
             # Logging.
             if epoch % self.args.log_interval == 0:
@@ -144,6 +137,17 @@ class Reinforce():
 
         self.summary_writer.close()
         self.plot()
+
+    def test(self, epoch):
+        print('\nTesting')
+        self.model.eval()
+        with torch.no_grad():
+            rewards = [self.generate_episode(test=True) for epoch in range(self.args.test_episodes)]
+            rewards_mean, rewards_std = np.mean(rewards), np.std(rewards)
+            print('Test Rewards (Mean): %.3f | Test Rewards (Std): %.3f\n' % (rewards_mean, rewards_std))
+            self.rewards_data.append([epoch, rewards_mean, rewards_std])
+            self.summary_writer.add_scalar('test/rewards_mean', rewards_mean, epoch)
+            self.summary_writer.add_scalar('test/rewards_std', rewards_std, epoch)
 
     def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
         '''
@@ -167,6 +171,7 @@ class Reinforce():
         rewards, returns = [], []
         actions, log_probs = [], []
 
+        self.model.eval()
         while not done:
             # Run policy on current state to log probabilities of actions.
             states.append(torch.tensor(state, device=self.device).unsqueeze(0))
@@ -222,15 +227,15 @@ def parse_arguments():
     parser.add_argument('--num_episodes', dest='num_episodes', type=int,
                         default=50000, help='Number of episodes to train on.')
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
-                        default=100, help='Number of episodes to test` on.')
+                        default=100, help='Number of episodes to test on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,
                         default=2000, help='Weights save interval.')
     parser.add_argument('--test_interval', dest='test_interval', type=int,
                         default=500, help='Test interval.')
     parser.add_argument('--log_interval', dest='log_interval', type=int,
-                        default=50, help='Log interval.')
+                        default=100, help='Log interval.')
     parser.add_argument('--lr', dest='lr', type=float,
-                        default=5e-4, help='The learning rate.')
+                        default=1e-3, help='The learning rate.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
     parser_group = parser.add_mutually_exclusive_group(required=False)
