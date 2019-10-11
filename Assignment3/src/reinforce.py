@@ -1,4 +1,5 @@
 import os
+import pdb
 import sys
 import json
 import argparse
@@ -71,7 +72,6 @@ class Reinforce():
         if args.render:
             self.model.eval()
             self.generate_episode(render=True)
-            self.plot()
             return
 
         # Network training mode.
@@ -169,7 +169,7 @@ class Reinforce():
 
         while not done:
             # Run policy on current state to log probabilities of actions.
-            states.append(torch.tensor(state, device=self.device).unsqueeze(0))
+            states.append(torch.tensor(state, device=self.device).float().unsqueeze(0))
             action_probs = self.model.forward(states[-1]).squeeze(0)
 
             # Sample action from the log probabilities.
@@ -196,13 +196,14 @@ class Reinforce():
         if test: return np.sum(rewards)
 
         # Flip rewards from T-1 to 0.
+        pdb.set_trace()
         rewards = torch.tensor(rewards[::-1], device=self.device)
-
         # Compute the cumulative discounted returns.
         cumulative_return = 0
         for current_reward in rewards:
             cumulative_return = (cumulative_return * gamma) + current_reward
             returns.append(cumulative_return)
+        pdb.set_trace()
 
         # Normalize returns.
         returns = torch.stack(returns)
