@@ -2,5 +2,9 @@
 *.tex
 .*
 *.pyc
-venv/
+*env/
+*/logs/*
 video*/
+*.h5
+*.json
+*.tfevents*

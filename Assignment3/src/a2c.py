@@ -36,7 +36,7 @@ class Critic(torch.nn.Module):
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
         x = F.relu(self.linear3(x))
-        x = F.log_softmax(self.output(x), dim=1)
+        x = self.output(x)
         return x
 
 class A2C():
@@ -52,6 +52,7 @@ class A2C():
         # - n: The value of N in N-step A2C.
         self.args = args
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # self.device = torch.device('cpu')
 
         # Create the environment.
         self.env = gym.make(env)
@@ -59,11 +60,13 @@ class A2C():
 
         # Setup model.
         self.policy = Model(input_dim=self.env.observation_space.shape[0],
-            output_dim=self.env.action_space.n)
+                            output_dim=self.env.action_space.n,
+                            hidden_size=64)
         self.policy.apply(self.initialize_weights)
         # Setup critic model.
         self.critic = Critic(input_dim=self.env.observation_space.shape[0],
-            output_dim=1)
+                             output_dim=1, 
+                             hidden_size=64)
         self.critic.apply(self.initialize_weights)
 
         # Setup optimizer.
@@ -140,7 +143,6 @@ class A2C():
             # Generate epsiode data.
             states, returns, log_probs = self.generate_episode()
             value_function = self.critic.forward(states).squeeze(1)
-
             # Compute loss and policy gradient.
             self.policy_optimizer.zero_grad()
             policy_loss = ((returns - value_function.detach())*(-log_probs)).mean()  # Element wise multiplication.
@@ -166,7 +168,7 @@ class A2C():
 
             # Logging.
             if epoch % self.args.log_interval == 0:
-                print('Epoch: {0:05d}/{1:05d} | Policy_Loss: {2:.3f} | Value_Loss: {2:.3f}'.format(epoch, self.args.num_episodes, policy_loss, critic_loss))
+                print('Epoch: {0:05d}/{1:05d} | Policy_Loss: {2:.3f} | Value_Loss: {3:.3f}'.format(epoch, self.args.num_episodes, policy_loss, critic_loss))
                 self.summary_writer.add_scalar('train/policy_loss', policy_loss, epoch)
                 self.summary_writer.add_scalar('train/critic_loss', critic_loss, epoch)
 
@@ -177,7 +179,7 @@ class A2C():
 
         self.summary_writer.close()
 
-    def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
+    def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=2000):
         '''
         Generates an episode by executing the current policy in the given env.
         Returns:
@@ -228,7 +230,7 @@ class A2C():
         if test: return np.sum(rewards)
 
         # Flip rewards from T-1 to 0.
-        rewards = np.array(rewards)
+        rewards = np.array(rewards)/self.args.reward_normalizer
         # rewards = torch.tensor(rewards, device=self.device).unsqueeze(0)
         # Compute the cumulative discounted returns.
         n_step_rewards = np.zeros((1,self.args.n))
@@ -261,6 +263,8 @@ def parse_arguments():
                         default=1e-4, help="The critic's learning rate.")
     parser.add_argument('--n', dest='n', type=int,
                         default=20, help="The value of N in N-step A2C.")
+    parser.add_argument('--reward_norm', dest='reward_normalizer', type=float,
+                        default=100.0, help='Normalize rewards by.')
 
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
                         default=100, help='Number of episodes to test` on.')
