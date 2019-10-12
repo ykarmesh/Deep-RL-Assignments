@@ -23,17 +23,14 @@ class Model(torch.nn.Module):
     def __init__(self, input_dim, output_dim, hidden_size=64):
         super(Model, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_size)
-        # self.linear1_bn = nn.BatchNorm1d(hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
-        # self.linear2_bn = nn.BatchNorm1d(hidden_size)
         self.linear3 = nn.Linear(hidden_size, hidden_size)
-        # self.linear3_bn = nn.BatchNorm1d(hidden_size)
         self.output = nn.Linear(hidden_size, output_dim)
 
     def forward(self, x):
-        x = F.relu(self.linear1(x))  # self.linear1_bn()
-        x = F.relu(self.linear2(x))  # self.linear2_bn()
-        x = F.relu(self.linear3(x))  # self.linear3_bn()
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
         x = F.log_softmax(self.output(x), dim=1)
         return x
 
@@ -80,7 +77,7 @@ class Reinforce():
             self.logdir = 'logs/%s/%s' % (self.environment_name, self.timestamp)
             self.summary_writer = SummaryWriter(self.logdir)
 
-            # Save hyperparameters.
+            # Save hyper-parameters.
             with open(self.logdir + '/training_parameters.json', 'w') as f:
                 json.dump(vars(self.args), f, indent=4)
 
@@ -112,7 +109,7 @@ class Reinforce():
     def train(self):
         '''Trains the model on a single episode using REINFORCE.'''
         for epoch in range(self.args.num_episodes):
-            # Generate epsiode data.
+            # Generate episode data.
             returns, log_probs = self.generate_episode()
 
             # Compute loss and policy gradient.
@@ -177,7 +174,9 @@ class Reinforce():
             action_probs = self.model.forward(states[-1]).squeeze(0)
 
             # Sample action from the log probabilities.
-            action = torch.argmax(torch.distributions.Multinomial(logits=action_probs).sample())
+            # Deterministic at test time, stochastic at train time.
+            if test: action = torch.argmax(action_probs)
+            else: action = torch.argmax(torch.distributions.Multinomial(logits=action_probs).sample())
             actions.append(action)
             log_probs.append(action_probs[action])
 
@@ -200,14 +199,13 @@ class Reinforce():
         if test: return np.sum(rewards)
 
         # Flip rewards from T-1 to 0.
-        pdb.set_trace()
         rewards = torch.tensor(rewards[::-1], device=self.device)
+
         # Compute the cumulative discounted returns.
         cumulative_return = 0
         for current_reward in rewards:
             cumulative_return = (cumulative_return * gamma) + current_reward
             returns.append(cumulative_return)
-        pdb.set_trace()
 
         # Normalize returns.
         returns = torch.stack(returns)

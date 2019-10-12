@@ -207,7 +207,8 @@ class A2C():
             action_probs = self.policy.forward(states[-1]).squeeze(0)
 
             # Sample action from the log probabilities.
-            action = torch.argmax(torch.distributions.Multinomial(logits=action_probs).sample())
+            if test: action = torch.argmax(action_probs)
+            else: action = torch.argmax(torch.distributions.Multinomial(logits=action_probs).sample())
             actions.append(action)
             log_probs.append(action_probs[action])
 
@@ -229,21 +230,20 @@ class A2C():
         # Return cumulative rewards for test mode.
         if test: return np.sum(rewards)
 
-
-        rewards = np.array(rewards)/self.args.reward_normalizer
+        # Flip rewards from T-1 to 0.
+        rewards = np.array(rewards) / self.args.reward_normalizer
         # rewards = torch.tensor(rewards, device=self.device).unsqueeze(0)
         # Compute the cumulative discounted returns.
-        n_step_rewards = np.zeros((1,self.args.n))
-        pdb.set_trace()
+        n_step_rewards = np.zeros((1, self.args.n))
         for i in reversed(range(rewards.shape[0])):
             if i + self.args.n >= rewards.shape[0]:
                 V_end = 0
             else:
                 V_end = self.critic.forward(states[i + self.args.n]).squeeze(0).detach()          #why is this zero?
-            n_step_rewards[0,:-1] = n_step_rewards[0,1:]*gamma
-            n_step_rewards[0,-1] = rewards[i]
+            n_step_rewards[0, :-1] = n_step_rewards[0, 1:] * gamma
+            n_step_rewards[0, -1] = rewards[i]
 
-            n_step_return = torch.tensor(n_step_rewards.sum(), device=self.device).unsqueeze(0).detach() + V_end*gamma**self.args.n
+            n_step_return = torch.tensor(n_step_rewards.sum(), device=self.device).unsqueeze(0).detach() + V_end * gamma ** self.args.n
             returns.append(n_step_return)
 
         # Normalize returns.
