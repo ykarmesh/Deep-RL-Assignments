@@ -141,8 +141,9 @@ class A2C():
         '''Trains the model on a single episode using REINFORCE.'''
         for epoch in range(self.args.num_episodes):
             # Generate epsiode data.
-            states, returns, log_probs = self.generate_episode()
-            value_function = self.critic.forward(states).squeeze(1)
+            states, returns, log_probs, value_function = self.generate_episode()
+            ipdb.set_trace()
+            # value_function = self.critic.forward(states).squeeze(1)
             # Compute loss and policy gradient.
             self.policy_optimizer.zero_grad()
             policy_loss = ((returns - value_function.detach())*(-log_probs)).mean()  # Element wise multiplication.
@@ -179,7 +180,7 @@ class A2C():
 
         self.summary_writer.close()
 
-    def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=2000):
+    def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
         '''
         Generates an episode by executing the current policy in the given env.
         Returns:
@@ -232,6 +233,9 @@ class A2C():
 
         # Flip rewards from T-1 to 0.
         rewards = np.array(rewards) / self.args.reward_normalizer
+
+        values = self.critic.forward(states).squeeze(0)
+        discounted_values = values * gamma ** self.args.n
         # rewards = torch.tensor(rewards, device=self.device).unsqueeze(0)
         # Compute the cumulative discounted returns.
         n_step_rewards = np.zeros((1, self.args.n))
@@ -239,11 +243,11 @@ class A2C():
             if i + self.args.n >= rewards.shape[0]:
                 V_end = 0
             else:
-                V_end = self.critic.forward(states[i + self.args.n]).squeeze(0).detach()          #why is this zero?
+                V_end = discounted_values[i + self.args.n]          #why is this zero?
             n_step_rewards[0, :-1] = n_step_rewards[0, 1:] * gamma
             n_step_rewards[0, -1] = rewards[i]
 
-            n_step_return = torch.tensor(n_step_rewards.sum(), device=self.device).unsqueeze(0).detach() + V_end * gamma ** self.args.n
+            n_step_return = torch.tensor(n_step_rewards.sum(), device=self.device).unsqueeze(0) + V_end 
             returns.append(n_step_return)
 
         # Normalize returns.
@@ -251,7 +255,7 @@ class A2C():
         # mean_return, std_return = returns.mean(), returns.std()
         # returns = (returns - mean_return) / (std_return + self.eps)
 
-        return torch.stack(states).squeeze(1), torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs)
+        return torch.stack(states).squeeze(1), torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values
 
 def parse_arguments():
     # Command-line flags are defined here.
@@ -277,6 +281,9 @@ def parse_arguments():
                         default=50, help='Log interval.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
+
+    parser.add_argument('--', action="store_true", default=True,                    
+                        help='action_space_scaling?')
 
     # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
     parser_group = parser.add_mutually_exclusive_group(required=False)
