@@ -119,7 +119,7 @@ class Reinforce():
             self.optimizer.step()
 
             # Test the model.
-            if epoch % self.args.test_interval == 0:
+            if epoch + 1 % self.args.test_interval == 0:
                 self.test(epoch)
 
             # Logging.
@@ -150,21 +150,21 @@ class Reinforce():
         while True:
             # Generate episode data.
             returns, log_probs = self.generate_episode()
-            self.summary_writer.add_scalar('train/trajectory_length', returns.size(), epoch)
+            self.summary_writer.add_scalar('train/trajectory_length', returns.size()[0], epoch)
 
-            utility_vector = torch.tensor(returns * log_probs)
-            if self.utility_buffer is None: self.utility_buffer = utility_vector
-            else: self.utility_buffer = torch.cat(self.utility_buffer, utility_vector)
+            if self.utility_buffer is None: self.utility_buffer = returns * log_probs
+            else: self.utility_buffer = torch.cat((self.utility_buffer, returns * log_probs))
 
             # Keep generating data until size > batch_size.
-            if self.utility_buffer.size() >= self.args.batch_size: break
+            if self.utility_buffer.size()[0] > self.args.batch_size: break
 
         # Sample sub-trajectory of given batch size and compute loss.
-        batch = self.utility_buffer[:self.arg.batch_size]
+        batch = torch.narrow(self.utility_buffer, 0, 0, self.args.batch_size)
         loss = batch.mean().neg()
 
         # Purge buffer.
-        self.utility_buffer = self.utility_buffer[self.arg.batch_size:]
+        self.utility_buffer = torch.narrow(self.utility_buffer, 0,
+            self.args.batch_size, self.utility_buffer.size()[0] - self.args.batch_size)
         return loss
 
     def generate_episode(self, gamma=0.99, test=False, render=False):
@@ -250,9 +250,9 @@ def parse_arguments():
     parser.add_argument('--save_interval', dest='save_interval', type=int,
                         default=2000, help='Weights save interval.')
     parser.add_argument('--test_interval', dest='test_interval', type=int,
-                        default=500, help='Test interval.')
+                        default=25, help='Test interval.')
     parser.add_argument('--log_interval', dest='log_interval', type=int,
-                        default=100, help='Log interval.')
+                        default=5, help='Log interval.')
     parser.add_argument('--lr', dest='lr', type=float,
                         default=5e-4, help='The learning rate.')
     parser.add_argument('--max_iters', dest='max_iters', type=int,
