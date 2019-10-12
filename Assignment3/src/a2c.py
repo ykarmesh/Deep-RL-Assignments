@@ -229,11 +229,12 @@ class A2C():
         # Return cumulative rewards for test mode.
         if test: return np.sum(rewards)
 
-        # Flip rewards from T-1 to 0.
+
         rewards = np.array(rewards)/self.args.reward_normalizer
         # rewards = torch.tensor(rewards, device=self.device).unsqueeze(0)
         # Compute the cumulative discounted returns.
         n_step_rewards = np.zeros((1,self.args.n))
+        pdb.set_trace()
         for i in reversed(range(rewards.shape[0])):
             if i + self.args.n >= rewards.shape[0]:
                 V_end = 0
