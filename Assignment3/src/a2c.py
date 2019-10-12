@@ -142,7 +142,6 @@ class A2C():
         for epoch in range(self.args.num_episodes):
             # Generate epsiode data.
             states, returns, log_probs, value_function = self.generate_episode()
-            ipdb.set_trace()
             # value_function = self.critic.forward(states).squeeze(1)
             # Compute loss and policy gradient.
             self.policy_optimizer.zero_grad()
@@ -208,7 +207,7 @@ class A2C():
             action_probs = self.policy.forward(states[-1]).squeeze(0)
 
             # Sample action from the log probabilities.
-            if test: action = torch.argmax(action_probs)
+            if test and self.args.det_eval: action = torch.argmax(action_probs)
             else: action = torch.argmax(torch.distributions.Multinomial(logits=action_probs).sample())
             actions.append(action)
             log_probs.append(action_probs[action])
@@ -233,6 +232,7 @@ class A2C():
 
         # Flip rewards from T-1 to 0.
         rewards = np.array(rewards) / self.args.reward_normalizer
+        states = torch.stack(states).squeeze(1)
 
         values = self.critic.forward(states).squeeze(0)
         discounted_values = values * gamma ** self.args.n
@@ -255,7 +255,7 @@ class A2C():
         # mean_return, std_return = returns.mean(), returns.std()
         # returns = (returns - mean_return) / (std_return + self.eps)
 
-        return torch.stack(states).squeeze(1), torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values
+        return states, torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values.squeeze()
 
 def parse_arguments():
     # Command-line flags are defined here.
@@ -282,8 +282,8 @@ def parse_arguments():
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
 
-    parser.add_argument('--', action="store_true", default=True,                    
-                        help='action_space_scaling?')
+    parser.add_argument('--det_eval', action="store_true", default=False,                    
+                        help='deterministic policy for testing')
 
     # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
     parser_group = parser.add_mutually_exclusive_group(required=False)
