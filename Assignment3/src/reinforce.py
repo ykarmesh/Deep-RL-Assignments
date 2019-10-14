@@ -119,7 +119,7 @@ class Reinforce():
             self.optimizer.step()
 
             # Test the model.
-            if epoch + 1 % self.args.test_interval == 0:
+            if epoch % self.args.test_interval == 0:
                 self.test(epoch)
 
             # Logging.
@@ -146,7 +146,11 @@ class Reinforce():
             self.summary_writer.add_scalar('test/rewards_std', rewards_std, epoch)
         self.model.train()
 
-    def generate_batch(self, epoch):
+    def generate_batch(self, epoch, single_episode=True):
+        if single_episode:
+            returns, log_probs = self.generate_episode()
+            return (returns * log_probs).mean().neg()
+
         while True:
             # Generate episode data.
             returns, log_probs = self.generate_episode()
@@ -250,9 +254,9 @@ def parse_arguments():
     parser.add_argument('--save_interval', dest='save_interval', type=int,
                         default=2000, help='Weights save interval.')
     parser.add_argument('--test_interval', dest='test_interval', type=int,
-                        default=25, help='Test interval.')
+                        default=500, help='Test interval.')
     parser.add_argument('--log_interval', dest='log_interval', type=int,
-                        default=5, help='Log interval.')
+                        default=100, help='Log interval.')
     parser.add_argument('--lr', dest='lr', type=float,
                         default=5e-4, help='The learning rate.')
     parser.add_argument('--max_iters', dest='max_iters', type=int,
