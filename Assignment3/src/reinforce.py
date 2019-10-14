@@ -31,7 +31,7 @@ class Model(torch.nn.Module):
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
         x = F.relu(self.linear3(x))
-        x = F.softmax(self.output(x), dim=1)
+        x = F.log_softmax(self.output(x), dim=1)
         return x
 
 
@@ -146,11 +146,7 @@ class Reinforce():
             self.summary_writer.add_scalar('test/rewards_std', rewards_std, epoch)
         self.model.train()
 
-    def generate_batch(self, epoch, single_episode=False):
-        if single_episode:
-            returns, log_probs = self.generate_episode()
-            return (returns * log_probs).mean().neg()
-
+    def generate_batch(self, epoch):
         while True:
             # Generate episode data.
             returns, log_probs = self.generate_episode()
@@ -200,14 +196,10 @@ class Reinforce():
 
             # Sample action from the log probabilities.
             # Deterministic at test time, stochastic at train time.
-            if test and self.args.det_eval:
-                action = torch.argmax(action_probs)
-                log_probs.append(torch.log(torch.max(action_probs)))
-            else:
-                sampler = torch.distributions.Categorical(probs=action_probs)
-                action = sampler.sample()
-                log_probs.append(sampler.log_prob(action))
+            if test and self.args.det_eval: action = torch.argmax(action_probs)
+            else: action = torch.argmax(torch.distributions.Multinomial(logits=action_probs).sample())
             actions.append(action)
+            log_probs.append(action_probs[action])
 
             # Run simulation with current action to get new state and reward.
             if render: monitor.render()
