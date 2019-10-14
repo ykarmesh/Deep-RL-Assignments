@@ -63,6 +63,7 @@ class Reinforce():
         self.model.to(self.device)
 
         # Data for plotting.
+        self.utility_buffer = None
         self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
 
         # Video render mode.
@@ -109,12 +110,11 @@ class Reinforce():
     def train(self):
         '''Trains the model on a single episode using REINFORCE.'''
         for epoch in range(self.args.num_episodes):
-            # Generate episode data.
-            returns, log_probs = self.generate_episode()
+            # Compute loss.
+            loss = self.generate_batch(epoch)
 
             # Compute loss and policy gradient.
             self.optimizer.zero_grad()
-            loss = (returns * -log_probs).sum()
             loss.backward()
             self.optimizer.step()
 
@@ -146,7 +146,32 @@ class Reinforce():
             self.summary_writer.add_scalar('test/rewards_std', rewards_std, epoch)
         self.model.train()
 
-    def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
+    def generate_batch(self, epoch, single_episode=True):
+        if single_episode:
+            returns, log_probs = self.generate_episode()
+            return (returns * log_probs).mean().neg()
+
+        while True:
+            # Generate episode data.
+            returns, log_probs = self.generate_episode()
+            self.summary_writer.add_scalar('train/trajectory_length', returns.size()[0], epoch)
+
+            if self.utility_buffer is None: self.utility_buffer = returns * log_probs
+            else: self.utility_buffer = torch.cat((self.utility_buffer, returns * log_probs))
+
+            # Keep generating data until size > batch_size.
+            if self.utility_buffer.size()[0] > self.args.batch_size: break
+
+        # Sample sub-trajectory of given batch size and compute loss.
+        batch = torch.narrow(self.utility_buffer, 0, 0, self.args.batch_size)
+        loss = batch.mean().neg()
+
+        # Purge buffer.
+        self.utility_buffer = torch.narrow(self.utility_buffer, 0,
+            self.args.batch_size, self.utility_buffer.size()[0] - self.args.batch_size)
+        return loss
+
+    def generate_episode(self, gamma=0.99, test=False, render=False):
         '''
         Generates an episode by executing the current policy in the given env.
         Returns:
@@ -175,7 +200,7 @@ class Reinforce():
 
             # Sample action from the log probabilities.
             # Deterministic at test time, stochastic at train time.
-            if test: action = torch.argmax(action_probs)
+            if test and self.args.det_eval: action = torch.argmax(action_probs)
             else: action = torch.argmax(torch.distributions.Multinomial(logits=action_probs).sample())
             actions.append(action)
             log_probs.append(action_probs[action])
@@ -187,7 +212,7 @@ class Reinforce():
 
             # Break if the episode takes too long.
             iters += 1
-            if iters > max_iters: break
+            if iters > self.args.max_iters: break
 
         # Save video and close rendering.
         if render:
@@ -233,9 +258,15 @@ def parse_arguments():
     parser.add_argument('--log_interval', dest='log_interval', type=int,
                         default=100, help='Log interval.')
     parser.add_argument('--lr', dest='lr', type=float,
-                        default=1e-3, help='The learning rate.')
+                        default=5e-4, help='The learning rate.')
+    parser.add_argument('--max_iters', dest='max_iters', type=int,
+                        default=10000, help='Trajectory max iterations.')
+    parser.add_argument('--batch_size', dest='batch_size', type=int,
+                        default=1024, help='Batch size for utility vector.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
+    parser.add_argument('--det_eval', action="store_true", default=False,
+                        help='Deterministic policy for testing')
     parser_group = parser.add_mutually_exclusive_group(required=False)
     parser_group.add_argument('--render', dest='render', action='store_true',
                               help='Whether to render the environment.')
