@@ -61,12 +61,12 @@ class A2C():
         # Setup model.
         self.policy = Model(input_dim=self.env.observation_space.shape[0],
                             output_dim=self.env.action_space.n,
-                            hidden_size=64)
+                            hidden_size=self.args.actor_hidden_neurons)
         self.policy.apply(self.initialize_weights)
         # Setup critic model.
         self.critic = Critic(input_dim=self.env.observation_space.shape[0],
                              output_dim=1, 
-                             hidden_size=64)
+                             hidden_size=self.args.critic_hidden_neurons)
         self.critic.apply(self.initialize_weights)
 
         # Setup optimizer.
@@ -270,6 +270,10 @@ def parse_arguments():
                         default=20, help="The value of N in N-step A2C.")
     parser.add_argument('--reward_norm', dest='reward_normalizer', type=float,
                         default=100.0, help='Normalize rewards by.')
+    parser.add_argument('--actor_hidden_neurons', dest='actor_hidden_neurons', type=int,
+                        default=64, help='Number of neurons in the hidden layer of actor')
+    parser.add_argument('--critic_hidden_neurons', dest='critic_hidden_neurons', type=int,
+                        default=64, help='Number of neurons in the hidden layer of critic function')
 
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
                         default=100, help='Number of episodes to test` on.')
