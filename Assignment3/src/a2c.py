@@ -37,6 +37,7 @@ class Critic(torch.nn.Module):
         x = self.output(x)
         return x
 
+
 class A2C():
     # Implementation of N-step Advantage Actor Critic.
 
@@ -277,7 +278,6 @@ def parse_arguments():
                         default=64, help='Number of neurons in the hidden layer of actor')
     parser.add_argument('--critic_hidden_neurons', dest='critic_hidden_neurons', type=int,
                         default=64, help='Number of neurons in the hidden layer of critic function')
-
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
                         default=100, help='Number of episodes to test` on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,
@@ -291,8 +291,6 @@ def parse_arguments():
 
     parser.add_argument('--det_eval', action="store_true", default=False,                    
                         help='deterministic policy for testing')
-
-    # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
     parser_group = parser.add_mutually_exclusive_group(required=False)
     parser_group.add_argument('--render', dest='render',
                               action='store_true',
@@ -310,12 +308,9 @@ def main(args):
     args = parse_arguments()
     
     # Create the environment.
-    reinforce = A2C(args, env='LunarLander-v2')
-    if not args.render: reinforce.train()
-    # TODO: Create the model.
-
-    # TODO: Train the model using A2C and plot the learning curves.
+    actor_critic = A2C(args, env='LunarLander-v2')
+    if not args.render: actor_critic.train()
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
