@@ -13,12 +13,10 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
-
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from reinforce import Model
+
 
 class Critic(torch.nn.Module):
     '''This class essentially defines the network architecture'''
@@ -42,17 +40,10 @@ class Critic(torch.nn.Module):
 class A2C():
     # Implementation of N-step Advantage Actor Critic.
 
-    def __init__(self, args, env, train=True, n=20):
+    def __init__(self, args, env, train=True):
         # Initializes A2C.
-        # Args:
-        # - model: The actor model.
-        # - lr: Learning rate for the actor model.
-        # - critic_model: The critic model.
-        # - critic_lr: Learning rate for the critic model.
-        # - n: The value of N in N-step A2C.
         self.args = args
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        # self.device = torch.device('cpu')
 
         # Create the environment.
         self.env = gym.make(env)
@@ -63,6 +54,7 @@ class A2C():
                             output_dim=self.env.action_space.n,
                             hidden_size=64)
         self.policy.apply(self.initialize_weights)
+
         # Setup critic model.
         self.critic = Critic(input_dim=self.env.observation_space.shape[0],
                              output_dim=1, 
@@ -74,7 +66,6 @@ class A2C():
         self.policy_optimizer = optim.Adam(self.policy.parameters(), lr=args.policy_lr)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=args.critic_lr)
 
-
         # Model weights path.
         self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         self.weights_path = 'models/%s/%s' % (self.environment_name, self.timestamp)
@@ -84,14 +75,15 @@ class A2C():
         self.policy.to(self.device)
         self.critic.to(self.device)
 
-        # Data for plotting.
-        self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
-
         # Video render mode.
         if args.render:
             self.policy.eval()
             self.generate_episode(render=True)
+            self.plot()
             return
+
+        # Data for plotting.
+        self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
 
         # Network training mode.
         if train:
@@ -102,11 +94,6 @@ class A2C():
             # Save hyperparameters.
             with open(self.logdir + '/training_parameters.json', 'w') as f:
                 json.dump(vars(self.args), f, indent=4)
-
-
-        # TODO: Define any training operations and optimizers here, initialize
-        #       your variables, or alternately compile your model here.
-
 
     def initialize_weights(self, layer):
         if isinstance(layer, nn.Linear):
@@ -142,10 +129,10 @@ class A2C():
         for epoch in range(self.args.num_episodes):
             # Generate epsiode data.
             states, returns, log_probs, value_function = self.generate_episode()
-            # value_function = self.critic.forward(states).squeeze(1)
+
             # Compute loss and policy gradient.
             self.policy_optimizer.zero_grad()
-            policy_loss = ((returns - value_function.detach())*(-log_probs)).mean()  # Element wise multiplication.
+            policy_loss = ((returns - value_function.detach()) * -log_probs).mean()
             policy_loss.backward()
             self.policy_optimizer.step()
 
@@ -171,7 +158,6 @@ class A2C():
                 print('Epoch: {0:05d}/{1:05d} | Policy_Loss: {2:.3f} | Value_Loss: {3:.3f}'.format(epoch, self.args.num_episodes, policy_loss, critic_loss))
                 self.summary_writer.add_scalar('train/policy_loss', policy_loss, epoch)
                 self.summary_writer.add_scalar('train/critic_loss', critic_loss, epoch)
-
 
             # Save the model.
             if epoch % self.args.save_interval == 0:
@@ -236,7 +222,7 @@ class A2C():
 
         values = self.critic.forward(states).squeeze(0)
         discounted_values = values * gamma ** self.args.n
-        # rewards = torch.tensor(rewards, device=self.device).unsqueeze(0)
+
         # Compute the cumulative discounted returns.
         n_step_rewards = np.zeros((1, self.args.n))
         for i in reversed(range(rewards.shape[0])):
@@ -256,6 +242,23 @@ class A2C():
         # returns = (returns - mean_return) / (std_return + self.eps)
 
         return states, torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values.squeeze()
+
+    def plot(self):
+        # Save the plot.
+        filename = os.path.join('plots', *self.args.weights_path.split('/')[-2:]).replace('.h5', '.png')
+        if not os.path.exists(os.path.dirname(filename)): os.makedirs(os.path.dirname(filename))
+
+        # Make error plot with mean, std of rewards.
+        data = np.asarray(self.rewards_data)
+        plt.errorbar(data[:, 0], data[:, 1], data[:, 2], lw=2.5, elinewidth=1.5,
+            ecolor='grey', barsabove=True, capthick=2, capsize=3)
+        plt.title('Cumulative Rewards (Mean/Std) Plot for A2C Algorithm')
+        plt.xlabel('Number of Episodes')
+        plt.ylabel('Cumulative Rewards')
+        plt.grid()
+        plt.savefig(filename, dpi=300)
+        plt.show()
+
 
 def parse_arguments():
     # Command-line flags are defined here.

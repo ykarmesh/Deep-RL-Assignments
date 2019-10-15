@@ -12,9 +12,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
-
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -62,15 +59,16 @@ class Reinforce():
         if args.weights_path: self.load_model()
         self.model.to(self.device)
 
-        # Data for plotting.
-        self.utility_buffer = None
-        self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
-
         # Video render mode.
         if args.render:
             self.model.eval()
             self.generate_episode(render=True)
+            self.plot()
             return
+
+        # Data for plotting.
+        self.utility_buffer = None
+        self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
 
         # Network training mode.
         if train:
@@ -240,8 +238,20 @@ class Reinforce():
         return returns, torch.stack(log_probs[::-1])
 
     def plot(self):
-        # Make error plot with mean, std of rewards
-        pass
+        # Save the plot.
+        filename = os.path.join('plots', *self.args.weights_path.split('/')[-2:]).replace('.h5', '.png')
+        if not os.path.exists(os.path.dirname(filename)): os.makedirs(os.path.dirname(filename))
+
+        # Make error plot with mean, std of rewards.
+        data = np.asarray(self.rewards_data)
+        plt.errorbar(data[:, 0], data[:, 1], data[:, 2], lw=2.5, elinewidth=1.5,
+            ecolor='grey', barsabove=True, capthick=2, capsize=3)
+        plt.title('Cumulative Rewards (Mean/Std) Plot for Reinforce Algorithm')
+        plt.xlabel('Number of Episodes')
+        plt.ylabel('Cumulative Rewards')
+        plt.grid()
+        plt.savefig(filename, dpi=300)
+        plt.show()
 
 
 def parse_arguments():
