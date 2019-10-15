@@ -1,9 +1,17 @@
+import os
+import sys
+
+ROS_CV = '/opt/ros/kinetic/lib/python2.7/dist-packages'
+if ROS_CV in sys.path: sys.path.remove(ROS_CV)
+
+import cv2
+import gym
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.multiprocessing as mp
-import gym
-import os
+
 
 class Worker(mp.Process):
     def __init__(self, env, gnet, opt, global_ep, global_ep_r, res_queue, name):
@@ -46,3 +54,24 @@ class Worker(mp.Process):
                 s = s_
                 total_step += 1
         self.res_queue.put(None)
+
+
+def preprocess(frame):
+    frame = frame[34:34 + 160, :160]
+    frame = cv2.resize(frame, (84, 84))
+    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+    frame = frame.astype(np.float32)
+    frame *= (1.0 / 255.0)
+    frame = np.expand_dims(frame, 0)
+    frame = torch.from_numpy(frame)
+    return frame
+
+
+if __name__ == '__main__':
+    env = gym.make('Breakout-v0')
+    env.reset()
+    for i in range(50):
+        state, _, done, _ = env.step(1)
+        state = preprocess(state)
+        print(state.shape)
+        if done: break

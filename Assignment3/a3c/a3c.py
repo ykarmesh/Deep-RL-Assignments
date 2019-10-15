@@ -13,26 +13,39 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
-
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from model import ActorCritic
 
-class A3C():
-    # Implementation of N-step Asynchronous Advantage Actor Critic.
 
-    def __init__(self, args, env, train=True, n=20):
+class Critic(torch.nn.Module):
+    '''This class essentially defines the network architecture'''
+    def __init__(self, input_dim, output_dim, hidden_size=16):
+        super(Critic, self).__init__()
+        self.linear1 = nn.Linear(input_dim, hidden_size)
+        # self.linear1_bn = nn.BatchNorm1d(hidden_size)
+        self.linear2 = nn.Linear(hidden_size, hidden_size)
+        # self.linear2_bn = nn.BatchNorm1d(hidden_size)
+        self.linear3 = nn.Linear(hidden_size, hidden_size)
+        # self.linear3_bn = nn.BatchNorm1d(hidden_size)
+        self.output = nn.Linear(hidden_size, output_dim)
+
+    def forward(self, x):
+        x = F.relu(self.linear1(x))
+        x = F.relu(self.linear2(x))
+        x = F.relu(self.linear3(x))
+        x = self.output(x)
+        return x
+
+
+class A2C():
+    # Implementation of N-step Advantage Actor Critic.
+
+    def __init__(self, args, env, train=True):
         # Initializes A2C.
-        # Args:
-        # - model: The actor model.
-        # - lr: Learning rate for the actor model.
-        # - critic_model: The critic model.
-        # - critic_lr: Learning rate for the critic model.
-        # - n: The value of N in N-step A2C.
         self.args = args
+        self.set_random_seeds()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        # self.device = torch.device('cpu')
 
         # Create the environment.
         self.env = gym.make(env)
@@ -41,19 +54,19 @@ class A3C():
         # Setup model.
         self.policy = Model(input_dim=self.env.observation_space.shape[0],
                             output_dim=self.env.action_space.n,
-                            hidden_size=64)
+                            hidden_size=self.args.actor_hidden_neurons)
         self.policy.apply(self.initialize_weights)
+
         # Setup critic model.
         self.critic = Critic(input_dim=self.env.observation_space.shape[0],
                              output_dim=1, 
-                             hidden_size=64)
+                             hidden_size=self.args.critic_hidden_neurons)
         self.critic.apply(self.initialize_weights)
 
         # Setup optimizer.
         self.eps = 1e-10  # To avoid divide-by-zero error.
         self.policy_optimizer = optim.Adam(self.policy.parameters(), lr=args.policy_lr)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=args.critic_lr)
-
 
         # Model weights path.
         self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -64,14 +77,15 @@ class A3C():
         self.policy.to(self.device)
         self.critic.to(self.device)
 
-        # Data for plotting.
-        self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
-
         # Video render mode.
         if args.render:
             self.policy.eval()
             self.generate_episode(render=True)
+            self.plot()
             return
+
+        # Data for plotting.
+        self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
 
         # Network training mode.
         if train:
@@ -83,15 +97,15 @@ class A3C():
             with open(self.logdir + '/training_parameters.json', 'w') as f:
                 json.dump(vars(self.args), f, indent=4)
 
-
-        # TODO: Define any training operations and optimizers here, initialize
-        #       your variables, or alternately compile your model here.
-
-
     def initialize_weights(self, layer):
         if isinstance(layer, nn.Linear):
             nn.init.xavier_uniform_(layer.weight)
             nn.init.zeros_(layer.bias)
+
+    def set_random_seeds(self):
+        torch.manual_seed(self.args.random_seed)
+        np.random.seed(self.args.random_seed)
+        torch.backends.cudnn.benchmark = True
 
     def save_model(self, epoch):
         '''Helper function to save model state and weights.'''
@@ -122,10 +136,11 @@ class A3C():
         for epoch in range(self.args.num_episodes):
             # Generate epsiode data.
             states, returns, log_probs, value_function = self.generate_episode()
-            # value_function = self.critic.forward(states).squeeze(1)
+            self.summary_writer.add_scalar('train/trajectory_length', returns.size()[0], epoch)
+
             # Compute loss and policy gradient.
             self.policy_optimizer.zero_grad()
-            policy_loss = ((returns - value_function.detach())*(-log_probs)).mean()  # Element wise multiplication.
+            policy_loss = ((returns - value_function.detach()) * -log_probs).mean()
             policy_loss.backward()
             self.policy_optimizer.step()
 
@@ -152,12 +167,25 @@ class A3C():
                 self.summary_writer.add_scalar('train/policy_loss', policy_loss, epoch)
                 self.summary_writer.add_scalar('train/critic_loss', critic_loss, epoch)
 
-
             # Save the model.
             if epoch % self.args.save_interval == 0:
                 self.save_model(epoch)
 
+        self.save_model(epoch)
         self.summary_writer.close()
+
+    def preprocess(self, frame):
+        frame = frame[34:34 + 160, :160]
+        # Resize by half, then down to 42x42 (essentially mipmapping). If
+        # we resize directly we lose pixels that, when mapped to 42x42,
+        # aren't close enough to the pixel boundary.
+        frame = cv2.resize(frame, (80, 80))
+        frame = cv2.resize(frame, (42, 42))
+        frame = frame.mean(2, keepdims=True)
+        frame = frame.astype(np.float32)
+        frame *= (1.0 / 255.0)
+        frame = np.moveaxis(frame, -1, 0)
+        return frame
 
     def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
         '''
@@ -216,7 +244,7 @@ class A3C():
 
         values = self.critic.forward(states).squeeze(0)
         discounted_values = values * gamma ** self.args.n
-        # rewards = torch.tensor(rewards, device=self.device).unsqueeze(0)
+
         # Compute the cumulative discounted returns.
         n_step_rewards = np.zeros((1, self.args.n))
         for i in reversed(range(rewards.shape[0])):
@@ -237,6 +265,23 @@ class A3C():
 
         return states, torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values.squeeze()
 
+    def plot(self):
+        # Save the plot.
+        filename = os.path.join('plots', *self.args.weights_path.split('/')[-2:]).replace('.h5', '.png')
+        if not os.path.exists(os.path.dirname(filename)): os.makedirs(os.path.dirname(filename))
+
+        # Make error plot with mean, std of rewards.
+        data = np.asarray(self.rewards_data)
+        plt.errorbar(data[:, 0], data[:, 1], data[:, 2], lw=2.5, elinewidth=1.5,
+            ecolor='grey', barsabove=True, capthick=2, capsize=3)
+        plt.title('Cumulative Rewards (Mean/Std) Plot for A2C Algorithm')
+        plt.xlabel('Number of Episodes')
+        plt.ylabel('Cumulative Rewards')
+        plt.grid()
+        plt.savefig(filename, dpi=300)
+        plt.show()
+
+
 def parse_arguments():
     # Command-line flags are defined here.
     parser = argparse.ArgumentParser()
@@ -250,7 +295,12 @@ def parse_arguments():
                         default=20, help="The value of N in N-step A2C.")
     parser.add_argument('--reward_norm', dest='reward_normalizer', type=float,
                         default=100.0, help='Normalize rewards by.')
-
+    parser.add_argument('--actor_hidden_neurons', dest='actor_hidden_neurons', type=int,
+                        default=64, help='Number of neurons in the hidden layer of actor')
+    parser.add_argument('--critic_hidden_neurons', dest='critic_hidden_neurons', type=int,
+                        default=64, help='Number of neurons in the hidden layer of critic function')
+    parser.add_argument('--random_seed', dest='random_seed', type=int,
+                        default=1000, help='Random Seed')
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
                         default=100, help='Number of episodes to test` on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,
@@ -261,11 +311,8 @@ def parse_arguments():
                         default=50, help='Log interval.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
-
     parser.add_argument('--det_eval', action="store_true", default=False,                    
-                        help='deterministic policy for testing')
-
-    # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
+                        help='Deterministic policy for testing.')
     parser_group = parser.add_mutually_exclusive_group(required=False)
     parser_group.add_argument('--render', dest='render',
                               action='store_true',
@@ -278,17 +325,14 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main(args):
+def main():
     # Parse command-line arguments.
     args = parse_arguments()
     
     # Create the environment.
-    reinforce = A3C(args, env='LunarLander-v2')
-    if not args.render: reinforce.train()
-    # TODO: Create the model.
-
-    # TODO: Train the model using A2C and plot the learning curves.
+    actor_critic = ActorCritic(args, env='Breakout-v0')
+    if not args.render: actor_critic.train()
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    main()
