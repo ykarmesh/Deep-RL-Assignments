@@ -43,7 +43,9 @@ class A2C():
 
     def __init__(self, args, env, train=True):
         # Initializes A2C.
+
         self.args = args
+        self.set_random_seeds()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # Create the environment.
@@ -101,6 +103,13 @@ class A2C():
             nn.init.xavier_uniform_(layer.weight)
             nn.init.zeros_(layer.bias)
 
+
+    def set_random_seeds(self):
+        torch.manual_seed(self.args.random_seed)
+        np.random.seed(self.args.random_seed)
+        torch.backends.cudnn.benchmark = True
+
+
     def save_model(self, epoch):
         '''Helper function to save model state and weights.'''
         if not os.path.exists(self.weights_path): os.makedirs(self.weights_path)
@@ -130,6 +139,7 @@ class A2C():
         for epoch in range(self.args.num_episodes):
             # Generate epsiode data.
             states, returns, log_probs, value_function = self.generate_episode()
+            self.summary_writer.add_scalar('train/trajectory_length', returns.size()[0], epoch)
 
             # Compute loss and policy gradient.
             self.policy_optimizer.zero_grad()
@@ -278,6 +288,8 @@ def parse_arguments():
                         default=64, help='Number of neurons in the hidden layer of actor')
     parser.add_argument('--critic_hidden_neurons', dest='critic_hidden_neurons', type=int,
                         default=64, help='Number of neurons in the hidden layer of critic function')
+    parser.add_argument('--random_seed', dest='random_seed', type=int,
+                        default=1000, help='Random Seed')
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
                         default=100, help='Number of episodes to test` on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,
@@ -303,7 +315,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def main(args):
+def main():
     # Parse command-line arguments.
     args = parse_arguments()
     
