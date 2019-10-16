@@ -43,7 +43,6 @@ class A2C():
 
     def __init__(self, args, env, train=True):
         # Initializes A2C.
-
         self.args = args
         self.set_random_seeds()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -103,12 +102,10 @@ class A2C():
             nn.init.xavier_uniform_(layer.weight)
             nn.init.zeros_(layer.bias)
 
-
     def set_random_seeds(self):
         torch.manual_seed(self.args.random_seed)
         np.random.seed(self.args.random_seed)
         torch.backends.cudnn.benchmark = True
-
 
     def save_model(self, epoch):
         '''Helper function to save model state and weights.'''
@@ -174,6 +171,7 @@ class A2C():
             if epoch % self.args.save_interval == 0:
                 self.save_model(epoch)
 
+        self.save_model(epoch)
         self.summary_writer.close()
 
     def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
@@ -300,9 +298,8 @@ def parse_arguments():
                         default=50, help='Log interval.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
-
     parser.add_argument('--det_eval', action="store_true", default=False,                    
-                        help='deterministic policy for testing')
+                        help='Deterministic policy for testing.')
     parser_group = parser.add_mutually_exclusive_group(required=False)
     parser_group.add_argument('--render', dest='render',
                               action='store_true',

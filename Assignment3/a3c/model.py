@@ -26,16 +26,19 @@ class ActorCritic(nn.Module):
 
         self.apply(initialize_weights)
 
-    def forward(self, x):
+    def forward(self, x, action=False):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
         x = x.view(-1, self.feat_size)
-        action = F.relu(self.policy_fc1(x))
-        action = F.log_softmax(self.policy_fc2(x2), dim=1)
-        value = F.relu(self.critic_fc1(x))
-        value = self.critic_fc2(value)
-        return action, value
+        if action:
+            action = F.relu(self.policy_fc1(x))
+            action = F.log_softmax(self.policy_fc2(x2), dim=1)
+            return action
+        else:
+            value = F.relu(self.critic_fc1(x))
+            value = self.critic_fc2(value)
+            return value
 
 
 if __name__ == "__main__":

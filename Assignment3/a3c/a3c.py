@@ -18,29 +18,8 @@ import matplotlib.pyplot as plt
 from model import ActorCritic
 
 
-class Critic(torch.nn.Module):
-    '''This class essentially defines the network architecture'''
-    def __init__(self, input_dim, output_dim, hidden_size=16):
-        super(Critic, self).__init__()
-        self.linear1 = nn.Linear(input_dim, hidden_size)
-        # self.linear1_bn = nn.BatchNorm1d(hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        # self.linear2_bn = nn.BatchNorm1d(hidden_size)
-        self.linear3 = nn.Linear(hidden_size, hidden_size)
-        # self.linear3_bn = nn.BatchNorm1d(hidden_size)
-        self.output = nn.Linear(hidden_size, output_dim)
-
-    def forward(self, x):
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
-        x = self.output(x)
-        return x
-
-
-class A2C():
-    # Implementation of N-step Advantage Actor Critic.
-
+class A3C():
+    '''Implementation of N-step Asychronous Advantage Actor Critic'''
     def __init__(self, args, env, train=True):
         # Initializes A2C.
         self.args = args
@@ -251,7 +230,7 @@ class A2C():
             if i + self.args.n >= rewards.shape[0]:
                 V_end = 0
             else:
-                V_end = discounted_values[i + self.args.n]          #why is this zero?
+                V_end = discounted_values[i + self.args.n]
             n_step_rewards[0, :-1] = n_step_rewards[0, 1:] * gamma
             n_step_rewards[0, -1] = rewards[i]
 
@@ -274,7 +253,7 @@ class A2C():
         data = np.asarray(self.rewards_data)
         plt.errorbar(data[:, 0], data[:, 1], data[:, 2], lw=2.5, elinewidth=1.5,
             ecolor='grey', barsabove=True, capthick=2, capsize=3)
-        plt.title('Cumulative Rewards (Mean/Std) Plot for A2C Algorithm')
+        plt.title('Cumulative Rewards (Mean/Std) Plot for A3C Algorithm')
         plt.xlabel('Number of Episodes')
         plt.ylabel('Cumulative Rewards')
         plt.grid()
@@ -330,7 +309,7 @@ def main():
     args = parse_arguments()
     
     # Create the environment.
-    actor_critic = ActorCritic(args, env='Breakout-v0')
+    actor_critic = A3C(args, env='Breakout-v0')
     if not args.render: actor_critic.train()
 
 
