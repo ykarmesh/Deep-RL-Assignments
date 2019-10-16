@@ -110,7 +110,8 @@ class A3C():
         '''Trains the model on a single episode using REINFORCE.'''
         for epoch in range(self.args.num_episodes):
             # Generate epsiode data.
-            returns, log_probs, value_function = self.generate_episode()
+            returns, log_probs, value_function, train_rewards = self.generate_episode()
+            self.summary_writer.add_scalar('train/cumulative_rewards', train_rewards, epoch)
             self.summary_writer.add_scalar('train/trajectory_length', returns.size()[0], epoch)
 
             # Compute loss and policy gradient.
@@ -194,13 +195,14 @@ class A3C():
             if iters > max_iters: break
 
         # Save video and close rendering.
+        cum_rewards = np.sum(rewards)
         if render:
             monitor.close()
-            print('\nCumulative Rewards:', np.sum(rewards))
+            print('\nCumulative Rewards:', cum_rewards)
             return
 
         # Return cumulative rewards for test mode.
-        if test: return np.sum(rewards)
+        if test: return cum_rewards
 
         # Flip rewards from T-1 to 0.
         rewards = np.array(rewards) / self.args.reward_normalizer
@@ -231,7 +233,7 @@ class A3C():
         # mean_return, std_return = returns.mean(), returns.std()
         # returns = (returns - mean_return) / (std_return + self.eps)
 
-        return torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values.squeeze()
+        return torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values.squeeze(), cum_rewards
 
     def plot(self):
         # Save the plot.
@@ -266,7 +268,7 @@ def parse_arguments():
     parser.add_argument('--random_seed', dest='random_seed', type=int,
                         default=999, help='Random Seed')
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
-                        default=100, help='Number of episodes to test` on.')
+                        default=25, help='Number of episodes to test on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,
                         default=1000, help='Weights save interval.')
     parser.add_argument('--test_interval', dest='test_interval', type=int,
