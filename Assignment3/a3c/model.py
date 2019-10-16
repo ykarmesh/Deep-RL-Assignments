@@ -4,12 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def initialize_weights(layer):
-    if isinstance(layer, nn.Linear) or isinstance(layer, nn.Conv2d):
-        nn.init.xavier_uniform_(layer.weight)
-        nn.init.zeros_(layer.bias)
-
-
 class ActorCritic(nn.Module):
     def __init__(self, input_channels, action_space):
         super(ActorCritic, self).__init__()
@@ -23,8 +17,6 @@ class ActorCritic(nn.Module):
 
         self.policy_fc1 = nn.Linear(self.feat_size, 256)
         self.policy_fc2 = nn.Linear(256, 1)
-
-        self.apply(initialize_weights)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))

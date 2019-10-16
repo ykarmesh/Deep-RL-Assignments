@@ -1,11 +1,11 @@
-import argparse
 import os
-import json
 import sys
 import pdb
+import json
+import argparse
 from datetime import datetime
-
 from collections import deque
+
 import gym
 import torch
 import numpy as np
@@ -15,34 +15,13 @@ import torch.nn.functional as F
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 
+from env import preprocess
 from model import ActorCritic
 
 
-class Critic(torch.nn.Module):
-    '''This class essentially defines the network architecture'''
-    def __init__(self, input_dim, output_dim, hidden_size=16):
-        super(Critic, self).__init__()
-        self.linear1 = nn.Linear(input_dim, hidden_size)
-        # self.linear1_bn = nn.BatchNorm1d(hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        # self.linear2_bn = nn.BatchNorm1d(hidden_size)
-        self.linear3 = nn.Linear(hidden_size, hidden_size)
-        # self.linear3_bn = nn.BatchNorm1d(hidden_size)
-        self.output = nn.Linear(hidden_size, output_dim)
-
-    def forward(self, x):
-        x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
-        x = self.output(x)
-        return x
-
-
-class A2C():
-    # Implementation of N-step Advantage Actor Critic.
-
+class A3C():
+    '''Implementation of N-step Advantage Actor Critic'''
     def __init__(self, args, env, train=True):
-        # Initializes A2C.
         self.args = args
         self.set_random_seeds()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -52,15 +31,11 @@ class A2C():
         self.environment_name = env
 
         # Setup model.
-        self.policy = Model(input_dim=self.env.observation_space.shape[0],
-                            output_dim=self.env.action_space.n,
-                            hidden_size=self.args.actor_hidden_neurons)
+        self.policy = ActorCritic(4, output_dim=self.env.action_space.n)
         self.policy.apply(self.initialize_weights)
 
         # Setup critic model.
-        self.critic = Critic(input_dim=self.env.observation_space.shape[0],
-                             output_dim=1, 
-                             hidden_size=self.args.critic_hidden_neurons)
+        self.critic = ActorCritic(4, output_dim=self.env.action_space.n)
         self.critic.apply(self.initialize_weights)
 
         # Setup optimizer.
@@ -69,7 +44,7 @@ class A2C():
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=args.critic_lr)
 
         # Model weights path.
-        self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        self.timestamp = datetime.now().strftime('a2c-breakout-%Y-%m-%d_%H-%M-%S')
         self.weights_path = 'models/%s/%s' % (self.environment_name, self.timestamp)
 
         # Load pretrained weights.
@@ -98,7 +73,7 @@ class A2C():
                 json.dump(vars(self.args), f, indent=4)
 
     def initialize_weights(self, layer):
-        if isinstance(layer, nn.Linear):
+        if isinstance(layer, nn.Linear) or isinstance(layer, nn.Conv2d):
             nn.init.xavier_uniform_(layer.weight)
             nn.init.zeros_(layer.bias)
 
@@ -135,7 +110,7 @@ class A2C():
         '''Trains the model on a single episode using REINFORCE.'''
         for epoch in range(self.args.num_episodes):
             # Generate epsiode data.
-            states, returns, log_probs, value_function = self.generate_episode()
+            returns, log_probs, value_function = self.generate_episode()
             self.summary_writer.add_scalar('train/trajectory_length', returns.size()[0], epoch)
 
             # Compute loss and policy gradient.
@@ -205,14 +180,16 @@ class A2C():
             if not os.path.exists(save_path): os.makedirs(save_path)
             monitor = gym.wrappers.Monitor(self.env, save_path, force=True)
 
-        states = []
+        batches = []
+        states = [torch.zeros(84, 84, device=self.device).float()] * 3
         rewards, returns = [], []
         actions, log_probs = [], []
 
         while not done:
             # Run policy on current state to log probabilities of actions.
             states.append(torch.tensor(state, device=self.device).float().unsqueeze(0))
-            action_probs = self.policy.forward(states[-1]).squeeze(0)
+            batches.append(torch.stack(states[-4:]))
+            action_probs = self.policy.forward(batches[-1]).squeeze(0)
 
             # Sample action from the log probabilities.
             if test and self.args.det_eval: action = torch.argmax(action_probs)
@@ -240,9 +217,9 @@ class A2C():
 
         # Flip rewards from T-1 to 0.
         rewards = np.array(rewards) / self.args.reward_normalizer
-        states = torch.stack(states).squeeze(1)
 
-        values = self.critic.forward(states).squeeze(0)
+        # Compute value.
+        values = self.critic.forward(torch.stack(batches)).squeeze(0)
         discounted_values = values * gamma ** self.args.n
 
         # Compute the cumulative discounted returns.
@@ -251,7 +228,7 @@ class A2C():
             if i + self.args.n >= rewards.shape[0]:
                 V_end = 0
             else:
-                V_end = discounted_values[i + self.args.n]          #why is this zero?
+                V_end = discounted_values[i + self.args.n]
             n_step_rewards[0, :-1] = n_step_rewards[0, 1:] * gamma
             n_step_rewards[0, -1] = rewards[i]
 
@@ -263,7 +240,7 @@ class A2C():
         # mean_return, std_return = returns.mean(), returns.std()
         # returns = (returns - mean_return) / (std_return + self.eps)
 
-        return states, torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values.squeeze()
+        return torch.stack(returns[::-1]).detach().squeeze(1), torch.stack(log_probs), values.squeeze()
 
     def plot(self):
         # Save the plot.
@@ -295,10 +272,6 @@ def parse_arguments():
                         default=20, help="The value of N in N-step A2C.")
     parser.add_argument('--reward_norm', dest='reward_normalizer', type=float,
                         default=100.0, help='Normalize rewards by.')
-    parser.add_argument('--actor_hidden_neurons', dest='actor_hidden_neurons', type=int,
-                        default=64, help='Number of neurons in the hidden layer of actor')
-    parser.add_argument('--critic_hidden_neurons', dest='critic_hidden_neurons', type=int,
-                        default=64, help='Number of neurons in the hidden layer of critic function')
     parser.add_argument('--random_seed', dest='random_seed', type=int,
                         default=1000, help='Random Seed')
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
