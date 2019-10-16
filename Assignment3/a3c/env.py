@@ -63,7 +63,6 @@ def preprocess(frame):
     frame = frame.astype(np.float32)
     frame *= (1.0 / 255.0)
     frame = np.expand_dims(frame, 0)
-    frame = torch.from_numpy(frame)
     return frame
 
 

@@ -31,11 +31,11 @@ class A3C():
         self.environment_name = env
 
         # Setup model.
-        self.policy = ActorCritic(4, output_dim=self.env.action_space.n)
+        self.policy = ActorCritic(4, self.env.action_space.n)
         self.policy.apply(self.initialize_weights)
 
         # Setup critic model.
-        self.critic = ActorCritic(4, output_dim=self.env.action_space.n)
+        self.critic = ActorCritic(4, self.env.action_space.n)
         self.critic.apply(self.initialize_weights)
 
         # Setup optimizer.
@@ -138,7 +138,7 @@ class A3C():
 
             # Logging.
             if epoch % self.args.log_interval == 0:
-                print('Epoch: {0:05d}/{1:05d} | Policy_Loss: {2:.3f} | Value_Loss: {3:.3f}'.format(epoch, self.args.num_episodes, policy_loss, critic_loss))
+                print('Epoch: {0:05d}/{1:05d} | Policy Loss: {2:.3f} | Value Loss: {3:.3f}'.format(epoch, self.args.num_episodes, policy_loss, critic_loss))
                 self.summary_writer.add_scalar('train/policy_loss', policy_loss, epoch)
                 self.summary_writer.add_scalar('train/critic_loss', critic_loss, epoch)
 
@@ -148,19 +148,6 @@ class A3C():
 
         self.save_model(epoch)
         self.summary_writer.close()
-
-    def preprocess(self, frame):
-        frame = frame[34:34 + 160, :160]
-        # Resize by half, then down to 42x42 (essentially mipmapping). If
-        # we resize directly we lose pixels that, when mapped to 42x42,
-        # aren't close enough to the pixel boundary.
-        frame = cv2.resize(frame, (80, 80))
-        frame = cv2.resize(frame, (42, 42))
-        frame = frame.mean(2, keepdims=True)
-        frame = frame.astype(np.float32)
-        frame *= (1.0 / 255.0)
-        frame = np.moveaxis(frame, -1, 0)
-        return frame
 
     def generate_episode(self, gamma=0.99, test=False, render=False, max_iters=10000):
         '''
@@ -187,9 +174,9 @@ class A3C():
 
         while not done:
             # Run policy on current state to log probabilities of actions.
-            states.append(torch.tensor(state, device=self.device).float().unsqueeze(0))
+            states.append(torch.tensor(preprocess(state), device=self.device).float().squeeze(0))
             batches.append(torch.stack(states[-4:]))
-            action_probs = self.policy.forward(batches[-1]).squeeze(0)
+            action_probs = self.policy.forward(batches[-1].unsqueeze(0)).squeeze(0)
 
             # Sample action from the log probabilities.
             if test and self.args.det_eval: action = torch.argmax(action_probs)
@@ -219,7 +206,11 @@ class A3C():
         rewards = np.array(rewards) / self.args.reward_normalizer
 
         # Compute value.
-        values = self.critic.forward(torch.stack(batches)).squeeze(0)
+        values = []
+        minibatches = torch.split(torch.stack(batches), 256)
+        for minibatch in minibatches:
+            values.append(self.critic.forward(minibatch, action=False).squeeze(1))
+        values = torch.cat(values)
         discounted_values = values * gamma ** self.args.n
 
         # Compute the cumulative discounted returns.
@@ -269,19 +260,19 @@ def parse_arguments():
     parser.add_argument('--critic_lr', dest='critic_lr', type=float,
                         default=1e-4, help="The critic's learning rate.")
     parser.add_argument('--n', dest='n', type=int,
-                        default=20, help="The value of N in N-step A2C.")
+                        default=100, help="The value of N in N-step A2C.")
     parser.add_argument('--reward_norm', dest='reward_normalizer', type=float,
                         default=100.0, help='Normalize rewards by.')
     parser.add_argument('--random_seed', dest='random_seed', type=int,
-                        default=1000, help='Random Seed')
+                        default=999, help='Random Seed')
     parser.add_argument('--test_episodes', dest='test_episodes', type=int,
                         default=100, help='Number of episodes to test` on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,
-                        default=2000, help='Weights save interval.')
+                        default=1000, help='Weights save interval.')
     parser.add_argument('--test_interval', dest='test_interval', type=int,
-                        default=500, help='Test interval.')
+                        default=250, help='Test interval.')
     parser.add_argument('--log_interval', dest='log_interval', type=int,
-                        default=50, help='Log interval.')
+                        default=25, help='Log interval.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
     parser.add_argument('--det_eval', action="store_true", default=False,                    
