@@ -1,11 +1,10 @@
-import argparse
 import os
-import json
 import sys
-import pdb
+import json
+import argparse
 from datetime import datetime
-
 from collections import deque
+
 import gym
 import torch
 import numpy as np
@@ -23,11 +22,8 @@ class Critic(torch.nn.Module):
     def __init__(self, input_dim, output_dim, hidden_size=16):
         super(Critic, self).__init__()
         self.linear1 = nn.Linear(input_dim, hidden_size)
-        # self.linear1_bn = nn.BatchNorm1d(hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
-        # self.linear2_bn = nn.BatchNorm1d(hidden_size)
         self.linear3 = nn.Linear(hidden_size, hidden_size)
-        # self.linear3_bn = nn.BatchNorm1d(hidden_size)
         self.output = nn.Linear(hidden_size, output_dim)
 
     def forward(self, x):
@@ -39,10 +35,8 @@ class Critic(torch.nn.Module):
 
 
 class A2C():
-    # Implementation of N-step Advantage Actor Critic.
-
+    '''Implementation of N-step Advantage Actor Critic.'''
     def __init__(self, args, env, train=True):
-        # Initializes A2C.
         self.args = args
         self.set_random_seeds()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -238,7 +232,7 @@ class A2C():
             if i + self.args.n >= rewards.shape[0]:
                 V_end = 0
             else:
-                V_end = discounted_values[i + self.args.n]          #why is this zero?
+                V_end = discounted_values[i + self.args.n]
             n_step_rewards[0, :-1] = n_step_rewards[0, 1:] * gamma
             n_step_rewards[0, -1] = rewards[i]
 
