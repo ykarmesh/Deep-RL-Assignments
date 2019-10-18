@@ -222,9 +222,8 @@ class A2C():
             # Sample action from the log probabilities.
             if test and self.args.det_eval: action = torch.argmax(action_probs)
             else: action = torch.argmax(torch.distributions.Multinomial(logits=action_probs).sample())
-            log_probs.append(action_probs[action])
-            if action >= 2: action += 1  # Since right and left is 3 and 4
             actions.append(action)
+            log_probs.append(action_probs[action])
 
             # Run simulation with current action to get new state and reward.
             if render: monitor.render()
