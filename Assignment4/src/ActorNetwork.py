@@ -12,10 +12,11 @@ class ActorNetwork(torch.nn.Module):
         self.linear1 = nn.Linear(input_dim, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
         self.linear3 = nn.Linear(hidden_size, hidden_size)
-        #self.output = nn.Linear(hidden_size, output_dim)
+        self.output = nn.Linear(hidden_size, output_dim)
 
     def forward(self, state):
         x = F.relu(self.linear1(state))
         x = F.relu(self.linear2(x))
-        x= torch.tanh(self.linear3(x))
+        x = F.relu(self.linear3(x))
+        x= torch.tanh(self.output(x))
         return x

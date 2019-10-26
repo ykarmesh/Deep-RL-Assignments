@@ -67,7 +67,7 @@ class DDPG():
         self.num_observations= self.env.observation_space.shape[0]
         #num_actions= self.env.action_space.n
         # We are operating in continuous space, hence, the action will be a single value 
-        self.num_actions= 1
+        self.num_actions= 2
 
 
         #Setup models
@@ -81,11 +81,11 @@ class DDPG():
 
         
         self.critic= CriticNetwork(input_dim= self.num_observations + self.num_actions,
-                                           output_dim= self.num_actions,
+                                           output_dim= 1,
                                            hidden_size= self.args.critic_hidden_neurons)
  
         self.target_critic= CriticNetwork(input_dim= self.num_observations + self.num_actions,
-                                           output_dim= self.num_actions, 
+                                           output_dim= 1, 
                                            hidden_size= self.args.critic_hidden_neurons)
 
         self.actor.apply(self.initialize_weights)
@@ -110,52 +110,89 @@ class DDPG():
     
 
     def update_nets(self):
+        states, actions, rewards, next_states, dones= self.replay_buffer.get_batch(self.args.batch_size)
+
+        # Find target output using target nets
+        #Qval= self.critic.forward(states,actions).squeeze(0)    
+
+        Qval= self.critic.forward(states,actions)     
+        nextQVal= self.target_critic.forward(next_states,  self.target_actor.forward(states))   
+        yi= rewards + self.args.gamma*(nextQVal)
+
+        # Critic loss
+        critic_loss= self.critic_loss_criterion(yi, Qval)
+        # Actor loss
+        actor_loss = -self.critic.forward(states, self.actor.forward(states)).mean()
         
-        # Find critic loss
 
-        # Find actor loss 
+        print('-------------------------------------------------------------')
+        print ('Critic Loss: ', critic_loss)
+        print('-------------------------------------------------------------')
+        print ('Actor Loss: ', actor_loss)
+        print('-------------------------------------------------------------')
+        
+        # Perform back prop for both actor and critic 
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        self.actor_optimizer.step()
 
-        # Update the networks (Actor and critic) by doing backprop
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward() 
+        self.critic_optimizer.step()
+
         # Update the target critic and actor network by doing tau delay based updates  
-        
-        pass
+        for target_param, param in zip(self.target_actor.parameters(), self.actor.parameters()):
+            target_param.data.copy_(self.args.tau*param  + (1-self.args.tau*param)*target_param)
+
+        for target_param, param in zip(self.target_critic.parameters(), self.critic.parameters()):
+            target_param.data.copy_(self.args.tau*param  + (1-self.args.tau*param)*target_param)
+
 
     # Code to the test the trained neural network using new states 
     def test(self):
         pass
 
     def train(self):
-        noise_model= EpsilonNormalActionNoise(self.args.mu, self.args.sigma, self.args.epsilon)
-        reward= []
+        noise_model= EpsilonNormalActionNoise(self.args.noise_mu, self.args.noise_sigma, self.args.epsilon)
+        rewards= []
         mean_rewards= []
         # Going through all the episodes for the network 
         for epi in range(0, self.args.num_episodes):
             state= self.env.reset()
-            state_arr= np.array(state)
-            total_reward= 0.0
+            episode_reward= 0.0
             done= False 
             step= 0
             loss= 0
-            store_states= []
-            store_actions= []
+            states= []
+            actions= []
+
             while not done:
-
                 # Get action by passing state through the neural network 
-                states.append(torch.tensor(state, device=self.device).float().unsqueeze(0))
-                action_probs = self.model.forward(states[-1]).squeeze(0)
+                state= torch.tensor(state, device=self.device).float().unsqueeze(0)
+                states.append(state)
+                action = self.actor.forward(states[-1]).squeeze(0)
+                actions.append(action)
                 # Get noisy action by passing action through the noise model 
-
+                noisy_action= noise_model(action.detach().numpy())
                 # Pass action through state transition (env.step)
-
+                #next_state, reward, done, info = self.env.step(action.cpu().numpy()
+                next_state, reward, done, _= self.env.step(noisy_action)
                 # Get new state, and reward. Append it to the replay buffer 
-
-                # If the agent memory> batch_size, we update the model 
-
+                self.replay_buffer.add(state, 
+                                       torch.tensor(noisy_action, device=self.device).float().unsqueeze(0), 
+                                       reward, 
+                                       torch.tensor(next_state, device=self.device).float().unsqueeze(0),
+                                       done)
+                # If the Replay buffer size > batch_size, we update the model 
+                if(self.replay_buffer.burned_in):
+                    self.update_nets()    
                 # Update state variable to new_state
-
-                # Store episode rewards and mean rewardsm 
-
-
+                state= next_state
+                # Store episode rewards and mean rewards
+                episode_reward= episode_reward+ reward
+            
+            rewards.append(episode_reward)
+                 
 
     def initialize_weights(self, layer):
         if isinstance(layer, nn.Linear):
@@ -209,9 +246,12 @@ def parse_arguments():
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
     parser.add_argument('--memory_size', dest='memory_size', type=int, default=50000)
+    parser.add_argument('--gamma', dest='gamma', type=int, default=0.99)
 
-    parser.add_argument('--mu', dest='noise_mu', type=int, default= 1)
+    parser.add_argument('--mu', dest='noise_mu', type=int, default= 0)
     parser.add_argument('--sigma', dest='noise_sigma', type=int, default= 0.2)
+    parser.add_argument('--epsilon', dest='epsilon', type=int, default= 0.02)
+    parser.add_argument('--tau', dest='tau', type=int, default= 0.2)
 
 
 

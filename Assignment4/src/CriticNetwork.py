@@ -18,5 +18,6 @@ class CriticNetwork(torch.nn.Module):
         x= torch.cat([state, action],1)
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
-        x= torch.tanh(self.linear3(x))
+        x = F.relu(self.linear3(x))
+        x= torch.tanh(self.output(x))
         return x
