@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 #Actor and critic networks 
 from ActorNetwork import ActorNetwork
 from CriticNetwork import CriticNetwork
-
 from ReplayBuffer import ReplayBuffer 
 
 
@@ -52,7 +51,6 @@ class EpsilonNormalActionNoise(object):
             return np.random.uniform(-1.0, 1.0, size=action.shape)
 
 
-
 class DDPG():
     ''' Implementation of Deep deterministic policy gradients'''
     def __init__(self, args, environment_name, train=True):
@@ -66,9 +64,8 @@ class DDPG():
         # Data parameters
         self.num_observations= self.env.observation_space.shape[0]
         #num_actions= self.env.action_space.n
-        # We are operating in continuous space, hence, the action will be a single value 
+        # Actions include motion in x and y direction 
         self.num_actions= 2
-
 
         #Setup models
         self.actor= ActorNetwork(input_dim=  self.num_observations,
@@ -105,10 +102,7 @@ class DDPG():
         self.critic_loss_criterion= nn.MSELoss()
         self.actor_optimizer= optim.Adam(self.actor.parameters(),   lr= self.args.actor_lr)
         self.critic_optimizer= optim.Adam(self.critic.parameters(), lr= self.args.critic_lr)
-
-        pass
-    
-
+ 
     def update_nets(self):
         states, actions, rewards, next_states, dones= self.replay_buffer.get_batch(self.args.batch_size)
 
@@ -116,7 +110,7 @@ class DDPG():
         #Qval= self.critic.forward(states,actions).squeeze(0)    
 
         Qval= self.critic.forward(states,actions)     
-        nextQVal= self.target_critic.forward(next_states,  self.target_actor.forward(states))   
+        nextQVal= self.target_critic.forward(next_states,  self.target_actor.forward(next_states))   
         yi= rewards + self.args.gamma*(nextQVal)
 
         # Critic loss
@@ -190,6 +184,7 @@ class DDPG():
                 state= next_state
                 # Store episode rewards and mean rewards
                 episode_reward= episode_reward+ reward
+                print ("Episode reward", episode_reward)
             
             rewards.append(episode_reward)
                  
@@ -250,7 +245,7 @@ def parse_arguments():
 
     parser.add_argument('--mu', dest='noise_mu', type=int, default= 0)
     parser.add_argument('--sigma', dest='noise_sigma', type=int, default= 0.2)
-    parser.add_argument('--epsilon', dest='epsilon', type=int, default= 0.02)
+    parser.add_argument('--epsilon', dest='epsilon', type=int, default= 0.2)
     parser.add_argument('--tau', dest='tau', type=int, default= 0.2)
 
 
