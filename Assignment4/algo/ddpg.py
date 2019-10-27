@@ -35,7 +35,8 @@ class EpsilonNormalActionNoise(object):
         """
         self.mu = mu
         self.sigma = sigma
-        self.epsilon = epsilon
+        self.epsilon = 1
+        self.call_count = 0
 
     def __call__(self, action):
         """With probability epsilon, adds random noise to the action.
@@ -44,6 +45,9 @@ class EpsilonNormalActionNoise(object):
         Returns:
             noisy_action: a batched tensor storing the action.
         """
+        self.epsilon = max((1-0.9 * self.call_count /100000),0.1)
+        self.call_count += 1
+
         if np.random.uniform() > self.epsilon:
             return action + np.random.normal(self.mu, self.sigma)
         else:
