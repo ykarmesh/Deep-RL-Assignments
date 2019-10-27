@@ -49,7 +49,7 @@ class EpsilonNormalActionNoise(object):
         self.call_count += 1
 
         if np.random.uniform() > self.epsilon:
-            return action + np.random.normal(self.mu, self.sigma)
+            return np.clip(action + np.random.normal(self.mu, self.sigma), -1, 1)
         else:
             return np.random.uniform(-1.0, 1.0, size=action.shape)
 
