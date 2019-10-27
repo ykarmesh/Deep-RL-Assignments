@@ -33,6 +33,8 @@ def parse_arguments():
                         default=None, help='Pretrained weights file.')
     parser.add_argument('--train', action="store_true", default=True,                    
                         help='Do training')
+    parser.add_argument('--custom_init', action="store_true", default=False,                    
+                        help='If the netowrk should be initialized using custom weight values')
     parser_group = parser.add_mutually_exclusive_group(required=False)
     parser_group.add_argument('--render', dest='render',
                               action='store_true',

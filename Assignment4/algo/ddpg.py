@@ -80,8 +80,8 @@ class DDPG(object):
 
         self.action_selector = EpsilonNormalActionNoise(0, 0.20, self.args.epsilon)
         self.memory = ReplayBuffer(args.buffer_size, args.burn_in, state_dim, action_dim, self.device)
-        self.actor = ActorNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.actor_lr, self.device)
-        self.critic = CriticNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.actor_lr, self.args.gamma, self.device)
+        self.actor = ActorNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.actor_lr, self.device, args.custom_init)
+        self.critic = CriticNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.actor_lr, self.args.gamma, self.device, args.custom_init)
 
         if args.weights_path: self.load_model()
 
@@ -203,7 +203,7 @@ class DDPG(object):
                 with torch.no_grad():
                     action = self.actor.policy(state)
                     env_action = self.action_selector(action.cpu().numpy())
-                    action = torch.tensor(action, device=self.device)
+                    action = torch.tensor(env_action, device=self.device)
 
                 store_states.append(state)
                 store_actions.append(action)

@@ -17,16 +17,18 @@ class Actor(nn.Module):
         state_size: (int) size of the input.
         action_size: (int) size of the action.
     """
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size, action_size, custom_init):
         super(Actor, self).__init__()
         self.linear1 = nn.Linear(state_size, HIDDEN1_UNITS)
-        nn.init.uniform_(self.linear1.weight, a=-1/math.sqrt(state_size), b=1/math.sqrt(state_size))
 
         self.linear2 = nn.Linear(HIDDEN1_UNITS, HIDDEN2_UNITS)
-        nn.init.uniform_(self.linear2.weight, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
 
         self.output = nn.Linear(HIDDEN2_UNITS, action_size)
-        nn.init.uniform_(self.output.weight, a=-3*10e-3, b=3*10e-3)
+
+        if custom_init:
+            nn.init.uniform_(self.linear1.weight, a=-1/math.sqrt(state_size), b=1/math.sqrt(state_size))
+            nn.init.uniform_(self.linear2.weight, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
+            nn.init.uniform_(self.output.weight, a=-3*10e-3, b=3*10e-3)
 
 
     def forward(self, x):
@@ -38,7 +40,7 @@ class Actor(nn.Module):
 
 class ActorNetwork():
     def __init__(self, state_size, action_size, batch_size,
-                 tau, learning_rate, device):
+                 tau, learning_rate, device, custom_init):
         """Initialize the ActorNetwork.
         This class internally stores both the actor and the target actor nets.
         It also handles training the actor and updating the target net.
@@ -53,7 +55,7 @@ class ActorNetwork():
         self.lr = learning_rate
         self.tau = tau
         self.batch_size = batch_size
-        self.policy = Actor(state_size, action_size).to(device)
+        self.policy = Actor(state_size, action_size, custom_init).to(device)
         self.policy_optimizer = optim.Adam(self.policy.parameters(), lr=self.lr)
 
         self.policy_target = copy.deepcopy(self.policy)
