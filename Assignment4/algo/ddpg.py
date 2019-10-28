@@ -45,7 +45,7 @@ class EpsilonNormalActionNoise(object):
         Returns:
             noisy_action: a batched tensor storing the action.
         """
-        self.epsilon = max((1-0.9 * self.call_count /100000),0.1)
+        self.epsilon = max((1-0.9 * self.call_count/100000),0.1)
         self.call_count += 1
 
         if np.random.uniform() > self.epsilon:
@@ -229,13 +229,14 @@ class DDPG(object):
             store_states, store_actions = [], []
 
             if self.memory.burned_in:
-                states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
-                next_actions = self.actor.policy_target(states).detach()
-                critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
-                policy_loss = self.actor.train(self.critic.critic(states, self.actor.policy(states)))
+                if self.args.train_ddpg:
+                    critic_loss, policy_loss = self.train_DDPG()
+                    self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
+                else:
+                    critic_loss, policy_loss = self.train_TD3(i)
+                    if i%self.args.policy_update_frequency == 0:
+                        self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
 
-                self.critic.update_target()
-                self.actor.update_target()
 
             # Logging
             if self.memory.burned_in and i%self.args.log_interval == 0:
@@ -244,7 +245,6 @@ class DDPG(object):
                 print("\tSteps = %d; Info = %s" % (step, info['done']))
 
                 self.summary_writer.add_scalar('train/trajectory_length', step, i)
-                self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
                 self.summary_writer.add_scalar('train/critic_loss', critic_loss, i)
 
             if i % self.args.test_interval == 0:
@@ -264,6 +264,38 @@ class DDPG(object):
 
         self.save_model(i)
         self.summary_writer.close()
+
+    def train_DDPG(self):
+        states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
+        next_actions = self.actor.policy_target(states).detach()
+        critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
+        policy_loss = self.actor.train(self.critic.critic(states, self.actor.policy(states)))
+
+        self.critic.update_target()
+        self.actor.update_target()
+
+        return critic_loss, policy_loss
+    
+    def train_TD3(self, i):
+        states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
+        next_actions = self.actor.policy_target(states).detach()
+
+        self.noise_regularization(next_actions)
+
+        critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
+
+        policy_loss = 0
+        if i%self.args.policy_update_frequency == 0:
+            policy_loss = self.actor.train(self.critic.critic.get_Q(states, self.actor.policy(states)))
+
+            self.critic.update_target()
+            self.actor.update_target()
+        
+        return critic_loss, policy_loss
+
+    def noise_regularization(self, next_actions):
+        raise NotImplementedError
+        # return next_actions
 
     def plot(self):
         # Save the plot.

@@ -17,7 +17,7 @@ def parse_arguments():
     parser.add_argument('--gamma', dest='gamma', type=float,
                         default=0.98, help="gamma")
     parser.add_argument('--buffer_size', dest='buffer_size', type=int, default=1000000)
-    parser.add_argument('--burn_in', dest='burn_in', type=int, default=10000)
+    parser.add_argument('--burn_in', dest='burn_in', type=int, default=20000)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=1024)
     parser.add_argument('--epsilon', dest='epsilon', type=float,
                         default=0.10, help='Epsilon for noise')
@@ -33,6 +33,8 @@ def parse_arguments():
                         default=None, help='Pretrained weights file.')
     parser.add_argument('--train', action="store_true", default=True,                    
                         help='Do training')
+    parser.add_argument('--train_ddpg', action="store_true", default=True,                    
+                        help='Trains DDPG if true otherwise TD3')
     parser.add_argument('--custom_init', action="store_true", default=False,                    
                         help='If the netowrk should be initialized using custom weight values')
     parser_group = parser.add_mutually_exclusive_group(required=False)
