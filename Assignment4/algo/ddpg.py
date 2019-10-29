@@ -236,8 +236,8 @@ class DDPG(object):
             # Logging
             if self.memory.burned_in and i % self.args.log_interval == 0:
                 print("Episode %d: Total reward = %d" % (i, total_reward))
-                # print("\tTD loss = %.2f" % (critic_loss / step,)) 
-                print("\tSteps = %d; Info = %s" % (step, info['done']))
+                print("\tTD loss = %.2f" % (critic_loss / step,)) 
+                # print("\tSteps = %d; Info = %s" % (step, info['done']))
 
                 self.summary_writer.add_scalar('train/trajectory_length', step, i)
                 self.summary_writer.add_scalar('train/critic_loss', critic_loss, i)
