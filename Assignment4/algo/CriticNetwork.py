@@ -26,10 +26,13 @@ class Critic(nn.Module):
 
         self.output = nn.Linear(HIDDEN2_UNITS, 1)
 
-        # if custom_init:
-        #     nn.init.uniform_(self.linear1.weight, a=-1/math.sqrt(state_size+action_size), b=1/math.sqrt(state_size+action_size))
-        #     nn.init.uniform_(self.linear2.weight, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
-        #     nn.init.uniform_(self.output.weight, a=-3*10e-3, b=3*10e-3)
+        if custom_init:
+            nn.init.uniform_(self.linear1.weight, a=-1/math.sqrt(state_size+action_size), b=1/math.sqrt(state_size+action_size))
+            nn.init.uniform_(self.linear1.bias, a=-1/math.sqrt(state_size+action_size), b=1/math.sqrt(state_size+action_size))
+            nn.init.uniform_(self.linear2.weight, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
+            nn.init.uniform_(self.linear2.bias, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
+            nn.init.uniform_(self.output.weight, a=-3*1e-3, b=3*1e-3)
+            nn.init.uniform_(self.output.bias, a=-3*1e-3, b=3*1e-3)
 
     def forward(self, x, action):
         x = torch.cat((x, action), 1)
@@ -60,7 +63,7 @@ class CriticNetwork(object):
         self.gamma = gamma
         self.batch_size = batch_size
         self.critic = Critic(state_size, action_size, custom_init).to(device)
-        self.critic.apply(self.initialize_weights)
+        # self.critic.apply(self.initialize_weights)
 
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.lr)
 
@@ -127,11 +130,11 @@ class CriticTD3(nn.Module):
         if custom_init:
             nn.init.uniform_(self.linear1.weight, a=-1/math.sqrt(state_size + action_size), b=1/math.sqrt(state_size + action_size))
             nn.init.uniform_(self.linear2.weight, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
-            nn.init.uniform_(self.output1.weight, a=-3*10e-3, b=3*10e-3)
+            nn.init.uniform_(self.output1.weight, a=-3*1e-3, b=3*1e-3)
 
             nn.init.uniform_(self.linear3.weight, a=-1/math.sqrt(state_size + action_size), b=1/math.sqrt(state_size + action_size))
             nn.init.uniform_(self.linear4.weight, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
-            nn.init.uniform_(self.output2.weight, a=-3*10e-3, b=3*10e-3)
+            nn.init.uniform_(self.output2.weight, a=-3*1e-3, b=3*1e-3)
 
     def forward(self, x, action):
 

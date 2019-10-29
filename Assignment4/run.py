@@ -17,10 +17,10 @@ def parse_arguments():
     parser.add_argument('--gamma', dest='gamma', type=float,
                         default=0.98, help="gamma")
     parser.add_argument('--buffer_size', dest='buffer_size', type=int, default=1000000)
-    parser.add_argument('--burn_in', dest='burn_in', type=int, default=20000)
+    parser.add_argument('--burn_in', dest='burn_in', type=int, default=5000)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=1024)
     parser.add_argument('--epsilon', dest='epsilon', type=float,
-                        default=0.10, help='Epsilon for noise')
+                        default=0.2, help='Epsilon for noise')
     # parser.add_argument('--test_episodes', dest='test_episodes', type=int,
     #                     default=100, help='Number of episodes to test` on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,

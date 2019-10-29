@@ -26,10 +26,14 @@ class Actor(nn.Module):
 
         self.output = nn.Linear(HIDDEN2_UNITS, action_size)
 
-        # if custom_init:
-        #     nn.init.uniform_(self.linear1.weight, a=-1/math.sqrt(state_size), b=1/math.sqrt(state_size))
-        #     nn.init.uniform_(self.linear2.weight, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
-        #     nn.init.uniform_(self.output.weight, a=-3*10e-3, b=3*10e-3)
+        if custom_init:
+            nn.init.uniform_(self.linear1.weight, a=-1/math.sqrt(state_size), b=1/math.sqrt(state_size))
+            nn.init.uniform_(self.linear1.bias, a=-1/math.sqrt(state_size), b=1/math.sqrt(state_size))
+            nn.init.uniform_(self.linear2.weight, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
+            nn.init.uniform_(self.linear2.bias, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
+            nn.init.uniform_(self.output.weight, a=-3*10e-3, b=3*10e-3)
+            nn.init.uniform_(self.output.bias, a=-3*10e-3, b=3*10e-3)
+
 
     def forward(self, x):
         x = F.relu(self.linear1(x))
@@ -56,7 +60,7 @@ class ActorNetwork():
         self.tau = tau
         self.batch_size = batch_size
         self.policy = Actor(state_size, action_size, custom_init).to(device)
-        self.policy.apply(self.initialize_weights)
+        # self.policy.apply(self.initialize_weights)
 
         self.policy_optimizer = optim.Adam(self.policy.parameters(), lr=self.lr)
 

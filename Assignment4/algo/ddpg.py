@@ -35,7 +35,7 @@ class EpsilonNormalActionNoise(object):
         """
         self.mu = mu
         self.sigma = sigma
-        self.epsilon = 1
+        self.epsilon = epsilon
         self.call_count = 0
 
     def __call__(self, action):
@@ -45,11 +45,10 @@ class EpsilonNormalActionNoise(object):
         Returns:
             noisy_action: a batched tensor storing the action.
         """
-        self.epsilon = max((1-0.9 * self.call_count/100000),0.1)
+        # self.epsilon = max((1-0.9 * self.call_count/100000),0.1)
         self.call_count += 1
-
         if np.random.uniform() > self.epsilon:
-            return np.clip(action + np.random.normal(self.mu, self.sigma), -1, 1)
+            return np.clip(action + np.random.normal(self.mu, self.sigma), -1.0, 1.0)
         else:
             return np.random.uniform(-1.0, 1.0, size=action.shape)
 
@@ -77,17 +76,20 @@ class DDPG(object):
 
         # Data for plotting.
         self.rewards_data = []  # n * [epoch, mean(returns), std(returns)]
+        self.count = 0
 
-        self.action_selector = EpsilonNormalActionNoise(0, 0.20, self.args.epsilon)
+        self.action_selector = EpsilonNormalActionNoise(0, 0.05, self.args.epsilon)
         self.memory = ReplayBuffer(args.buffer_size, args.burn_in, state_dim, action_dim, self.device)
         self.actor = ActorNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.actor_lr, self.device, args.custom_init)
-        self.critic = CriticNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.actor_lr, self.args.gamma, self.device, args.custom_init)
+        self.critic = CriticNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.critic_lr, self.args.gamma, self.device, args.custom_init)
 
         if args.weights_path: self.load_model()
 
         if args.train:
             # Tensorboard logging.
             self.logdir = 'logs/%s' % (self.timestamp)
+            self.imgdir = 'imgs/%s' % (self.timestamp)
+            os.makedirs(self.imgdir)
             self.summary_writer = SummaryWriter(self.logdir)
 
             # Save hyperparameters.
@@ -124,7 +126,7 @@ class DDPG(object):
         else:
             raise Exception('No checkpoint found at %s' % self.args.weights_path)
 
-    def evaluate(self, num_episodes):
+    def evaluate(self, num_episodes, ):
         """Evaluate the policy. Noise is not added during evaluation.
 
         Args:
@@ -175,7 +177,9 @@ class DDPG(object):
                     plt.legend(loc='lower left', fontsize=28, ncol=3, bbox_to_anchor=(0.1, 1.0))
                 if i == 8:
                     # Comment out the line below to disable plotting.
-                    plt.show()
+                    plt.savefig(os.path.join(self.imgdir,str(self.count)))
+                    self.count += 1
+                    # plt.show()
         return np.mean(success_vec), np.mean(test_rewards), np.std(test_rewards)
 
 
@@ -267,7 +271,7 @@ class DDPG(object):
 
     def train_DDPG(self):
         states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
-        next_actions = self.actor.policy_target(states).detach()
+        next_actions = self.actor.policy_target(next_states).detach()
         critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
         policy_loss = self.actor.train(self.critic.critic(states, self.actor.policy(states)))
 
@@ -278,7 +282,7 @@ class DDPG(object):
     
     def train_TD3(self, i):
         states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
-        next_actions = self.actor.policy_target(states).detach()
+        next_actions = self.actor.policy_target(next_states).detach()
 
         self.noise_regularization(next_actions)
 
