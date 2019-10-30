@@ -20,7 +20,14 @@ def parse_arguments():
     parser.add_argument('--burn_in', dest='burn_in', type=int, default=5000)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=1024)
     parser.add_argument('--epsilon', dest='epsilon', type=float,
-                        default=0.2, help='Epsilon for noise')
+                        default=0.1, help='Epsilon for noise')
+    #TD3
+    parser.add_argument('--target_action_sigma', dest='target_action_sigma', type=float,
+                        default=0.1, help='action smoothing for TD3.')
+    parser.add_argument('--clip', dest='clip', type=float,
+                        default=0.1, help='clip value for action smoothing in TD3.')
+    parser.add_argument('--policy_update_frequency', dest='policy_update_frequency', type=int,
+                        default=2, help='How fast should we update policy wrt critic')
     # parser.add_argument('--test_episodes', dest='test_episodes', type=int,
     #                     default=100, help='Number of episodes to test` on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,
@@ -33,7 +40,7 @@ def parse_arguments():
                         default=None, help='Pretrained weights file.')
     parser.add_argument('--train', action="store_true", default=True,                    
                         help='Do training')
-    parser.add_argument('--train_ddpg', action="store_true", default=True,                    
+    parser.add_argument('--train_ddpg', action="store_true", default=False,                    
                         help='Trains DDPG if true otherwise TD3')
     parser.add_argument('--custom_init', action="store_true", default=False,                    
                         help='If the netowrk should be initialized using custom weight values')

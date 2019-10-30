@@ -11,7 +11,7 @@ from tensorboardX import SummaryWriter
 
 from algo.ReplayBuffer import ReplayBuffer
 from .ActorNetwork import ActorNetwork
-from .CriticNetwork import CriticNetwork
+from .CriticNetwork import CriticNetwork, CriticNetworkTD3
 
 BUFFER_SIZE = 1000000
 BATCH_SIZE = 1024
@@ -48,7 +48,7 @@ class EpsilonNormalActionNoise(object):
         # self.epsilon = max((1-0.9 * self.call_count/100000),0.1)
         self.call_count += 1
         if np.random.uniform() > self.epsilon:
-            return np.clip(action + np.random.normal(self.mu, self.sigma), -1.0, 1.0)
+            return np.clip(action + np.random.normal(self.mu, self.sigma, 2), -1.0, 1.0)
         else:
             return np.random.uniform(-1.0, 1.0, size=action.shape)
 
@@ -81,7 +81,12 @@ class DDPG(object):
         self.action_selector = EpsilonNormalActionNoise(0, 0.05, self.args.epsilon)
         self.memory = ReplayBuffer(args.buffer_size, args.burn_in, state_dim, action_dim, self.device)
         self.actor = ActorNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.actor_lr, self.device, args.custom_init)
-        self.critic = CriticNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.critic_lr, self.args.gamma, self.device, args.custom_init)
+        if self.args.train_ddpg:
+            self.critic = CriticNetwork(state_dim, action_dim, self.args.batch_size,  \
+                self.args.tau, self.args.critic_lr, self.args.gamma, self.device, args.custom_init)
+        else:
+            self.critic = CriticNetworkTD3(state_dim, action_dim, self.args.batch_size,  \
+                self.args.tau, self.args.critic_lr, self.args.gamma, self.device, args.custom_init)
 
         if args.weights_path: self.load_model()
 
@@ -207,7 +212,7 @@ class DDPG(object):
                 with torch.no_grad():
                     action = self.actor.policy(state)
                     env_action = self.action_selector(action.cpu().numpy())
-                    action = torch.tensor(env_action, device=self.device)
+                    action = torch.tensor(env_action, device=self.device).float()
 
                 store_states.append(state)
                 store_actions.append(action)
@@ -282,9 +287,8 @@ class DDPG(object):
     
     def train_TD3(self, i):
         states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
-        next_actions = self.actor.policy_target(next_states).detach()
-
-        self.noise_regularization(next_actions)
+        next_actions = self.noise_regularization(self.actor.policy_target(next_states).detach().cpu().numpy())
+        next_actions = torch.tensor(next_actions, device=self.device).float()
 
         critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
 
@@ -298,7 +302,7 @@ class DDPG(object):
         return critic_loss, policy_loss
 
     def noise_regularization(self, next_actions):
-        raise NotImplementedError
+        return np.clip(next_actions + np.clip(np.random.normal(0, self.args.target_action_sigma, 2), -self.args.clip, self.args.clip), -1, 1)
         # return next_actions
 
     def plot(self):
