@@ -3,6 +3,7 @@ import gym
 import envs
 from algo.ddpg import DDPG
 
+
 def parse_arguments():
     # Command-line flags are defined here.
     parser = argparse.ArgumentParser()
@@ -38,13 +39,13 @@ def parse_arguments():
     parser.add_argument('--test_interval', dest='test_interval', type=int,
                         default=100, help='Test interval.')
     parser.add_argument('--log_interval', dest='log_interval', type=int,
-                        default=20, help='Log interval.')
+                        default=100, help='Log interval.')
     parser.add_argument('--weights_path', dest='weights_path', type=str,
                         default=None, help='Pretrained weights file.')
     parser.add_argument('--train', action="store_true", default=True,                    
                         help='Do training')
-    parser.add_argument('--train_ddpg', action="store_true", default=False,                    
-                        help='Trains DDPG if true otherwise TD3')
+    parser.add_argument('--algorithm', type=str, default='ddpg',
+                        help='Training algorithm (ddpg | td3 | her)')
     parser.add_argument('--custom_init', action="store_true", default=False,                    
                         help='If the netowrk should be initialized using custom weight values')
     parser_group = parser.add_mutually_exclusive_group(required=False)
@@ -62,7 +63,7 @@ def main():
     args = parse_arguments()
     env = gym.make('Pushing2D-v0')
     algo = DDPG(args, env, 'ddpg_log.txt')
-    algo.train(args.num_episodes, hindsight=False)
+    algo.train(args.num_episodes)
 
 
 if __name__ == '__main__':
