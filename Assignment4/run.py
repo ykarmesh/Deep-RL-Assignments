@@ -21,7 +21,19 @@ def parse_arguments():
     parser.add_argument('--burn_in', dest='burn_in', type=int, default=5000)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=1024)
     parser.add_argument('--epsilon', dest='epsilon', type=float,
-                        default=0.2, help='Epsilon for noise')
+                        default=0.1, help='Epsilon for noise')
+    #TD3
+    parser.add_argument('--target_action_sigma', dest='target_action_sigma', type=float,
+                        default=0.05, help='action smoothing for TD3.')
+    parser.add_argument('--clip', dest='clip', type=float,
+                        default=0.05, help='clip value for action smoothing in TD3.')
+    parser.add_argument('--policy_update_frequency', dest='policy_update_frequency', type=int,
+                        default=2, help='How fast should we update policy wrt critic')
+    parser.add_argument('--num_update_iters', dest='num_update_iters', type=int,
+                        default=4, help='How many times to update the critic every episode')
+
+    # parser.add_argument('--test_episodes', dest='test_episodes', type=int,
+    #                     default=100, help='Number of episodes to test` on.')
     parser.add_argument('--save_interval', dest='save_interval', type=int,
                         default=2000, help='Weights save interval.')
     parser.add_argument('--test_interval', dest='test_interval', type=int,

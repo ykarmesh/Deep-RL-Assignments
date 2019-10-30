@@ -204,9 +204,9 @@ class CriticNetworkTD3(object):
             Q_target_1, Q_target_2 = self.critic_target(next_states, next_actions)
 
             # Compute the target Q-value for the loss.
-            y = rewards + self.gamma * (1 - done) * min(Q_target_1, Q_target_2) #check this
+            y = rewards + self.gamma * (1 - done) * torch.min(Q_target_1, Q_target_2) #check this
 
-        Q_value_1, Q_values_2 = self.critic(states, actions)
+        Q_value_1, Q_value_2 = self.critic(states, actions)
         # Network Input - S | Output - Q(S,A) | Error - (Y - Q(S,A))^2
         self.critic_optimizer.zero_grad()
         critic_loss =  F.mse_loss(y, Q_value_1) + F.mse_loss(y, Q_value_2)
