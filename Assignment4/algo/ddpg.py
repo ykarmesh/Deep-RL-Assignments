@@ -286,23 +286,24 @@ class DDPG(object):
         return critic_loss, policy_loss
     
     def train_TD3(self, i):
-        states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
-        next_actions = self.noise_regularization(self.actor.policy_target(next_states).detach().cpu().numpy())
-        next_actions = torch.tensor(next_actions, device=self.device).float()
+        for j in range(self.args.num_update_iters):
+            states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
+            next_actions = self.noise_regularization(self.actor.policy_target(next_states).detach().cpu().numpy())
+            next_actions = torch.tensor(next_actions, device=self.device).float()
 
-        critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
+            critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
 
-        policy_loss = 0
-        if i%self.args.policy_update_frequency == 0:
-            policy_loss = self.actor.train(self.critic.critic.get_Q(states, self.actor.policy(states)))
+            policy_loss = 0
+            if (i*self.args.num_update_iters + j)%self.args.policy_update_frequency == 0:
+                policy_loss = self.actor.train(self.critic.critic.get_Q(states, self.actor.policy(states)))
 
-            self.critic.update_target()
-            self.actor.update_target()
+                self.critic.update_target()
+                self.actor.update_target()
         
         return critic_loss, policy_loss
 
     def noise_regularization(self, next_actions):
-        return np.clip(next_actions + np.clip(np.random.normal(0, self.args.target_action_sigma, 2), -self.args.clip, self.args.clip), -1, 1)
+        return np.clip(next_actions + np.clip(np.random.normal(0, self.args.target_action_sigma, (self.args.batch_size, 2)), -self.args.clip, self.args.clip), -1.0, 1.0)
         # return next_actions
 
     def plot(self):
