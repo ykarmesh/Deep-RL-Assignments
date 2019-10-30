@@ -26,7 +26,6 @@ class EpsilonNormalActionNoise(object):
 
     def __init__(self, mu, sigma, epsilon):
         """Initialize the class.
-
         Args:
             mu: (float) mean of the noise (probably 0).
             sigma: (float) std dev of the noise.
@@ -66,6 +65,7 @@ class DDPG(object):
         action_dim = len(env.action_space.low)
         state_dim = len(env.observation_space.low)
         np.random.seed(1337)
+
         self.env = env
         self.args = args
         self.outfile = outfile_name
@@ -96,8 +96,6 @@ class DDPG(object):
             with open(self.logdir + '/training_parameters.json', 'w') as f:
                 json.dump(vars(self.args), f, indent=4)
 
-
-
     def save_model(self, epoch):
         '''Helper function to save model state and weights.'''
         if not os.path.exists(self.weights_path): os.makedirs(self.weights_path)
@@ -126,7 +124,7 @@ class DDPG(object):
         else:
             raise Exception('No checkpoint found at %s' % self.args.weights_path)
 
-    def evaluate(self, num_episodes, ):
+    def evaluate(self, num_episodes):
         """Evaluate the policy. Noise is not added during evaluation.
 
         Args:
@@ -182,40 +180,39 @@ class DDPG(object):
                     # plt.show()
         return np.mean(success_vec), np.mean(test_rewards), np.std(test_rewards)
 
-
-    def train(self, num_episodes, hindsight=False):
+    def train(self, num_episodes):
         """Runs the DDPG algorithm.
 
         Args:
             num_episodes: (int) Number of training episodes.
-            hindsight: (bool) Whether to use HER.
         """
-
         for i in range(num_episodes):
             state = self.env.reset()
             total_reward = 0.0
             done = False
             step = 0
             critic_loss = 0
-            store_states = []
-            store_actions = []
+            trajectory_data = []
             state = torch.tensor(state, device=self.device).float()
+
             while not done:
                 # Collect one episode of experience, saving the states and actions
                 # to store_states and store_actions, respectively.
-                # pdb.set_trace()
                 with torch.no_grad():
                     action = self.actor.policy(state)
                     env_action = self.action_selector(action.cpu().numpy())
                     action = torch.tensor(env_action, device=self.device)
 
-                store_states.append(state)
-                store_actions.append(action)
-                
                 next_state, reward, done, info = self.env.step(env_action)
                 next_state = torch.tensor(next_state, device=self.device).float()
-                
-                self.memory.add(state, action, torch.tensor(reward, device=self.device), next_state, torch.tensor(done, device=self.device))
+
+                self.memory.add(state, action, torch.tensor(reward, device=self.device),
+                    next_state, torch.tensor(done, device=self.device))
+
+                # Save data for HER.
+                if self.args.algorithm == 'her':
+                    trajectory_data.append([state.detach().numpy(), action.detach().numpy(),
+                        reward, next_state.detach().numpy(), done])
 
                 total_reward += reward
                 step += 1
@@ -223,27 +220,24 @@ class DDPG(object):
                 if not done:
                     state = next_state.clone().detach()
 
-
-            if hindsight:
+            if self.args.algorithm == 'her':
                 # For HER, we also want to save the final next_state.
-                store_states.append(new_s)
-                self.add_hindsight_replay_experience(store_states,
-                                                     store_actions)
-            del store_states, store_actions
-            store_states, store_actions = [], []
+                self.add_hindsight_replay_experience(trajectory_data)
 
             if self.memory.burned_in:
-                if self.args.train_ddpg:
+                if self.args.algorithm == 'ddpg':
                     critic_loss, policy_loss = self.train_DDPG()
                     self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
-                else:
+                elif self.args.algorithm == 'td3':
                     critic_loss, policy_loss = self.train_TD3(i)
-                    if i%self.args.policy_update_frequency == 0:
+                    if i % self.args.policy_update_frequency == 0:
                         self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
-
+                elif self.args.algorithm == 'her':
+                    critic_loss, policy_loss = self.train_HER()
+                    self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
 
             # Logging
-            if self.memory.burned_in and i%self.args.log_interval == 0:
+            if self.memory.burned_in and i % self.args.log_interval == 0:
                 print("Episode %d: Total reward = %d" % (i, total_reward))
                 # print("\tTD loss = %.2f" % (critic_loss / step,)) 
                 print("\tSteps = %d; Info = %s" % (step, info['done']))
@@ -269,6 +263,28 @@ class DDPG(object):
         self.save_model(i)
         self.summary_writer.close()
 
+    def add_hindsight_replay_experience(self, trajectory):
+        """Relabels a trajectory using HER.
+
+        Args:
+            states: a list of states.
+            actions: a list of states.
+        """
+        # Get new goal location (last location of box).
+        goal = trajectory[-1][3][2:4]
+
+        # Relabels a trajectory using a new goal state.
+        for state, action, reward, next_state, done in trajectory:
+            state[-2:] = goal.copy()
+            reward = self.env._HER_calc_reward(state)
+
+            self.memory.add(
+                torch.tensor(state, device=self.device),
+                torch.tensor(action, device=self.device),
+                torch.tensor(reward, device=self.device),
+                torch.tensor(next_state, device=self.device),
+                torch.tensor(done, device=self.device))
+
     def train_DDPG(self):
         states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
         next_actions = self.actor.policy_target(next_states).detach()
@@ -283,18 +299,27 @@ class DDPG(object):
     def train_TD3(self, i):
         states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
         next_actions = self.actor.policy_target(next_states).detach()
-
         self.noise_regularization(next_actions)
 
         critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
-
         policy_loss = 0
-        if i%self.args.policy_update_frequency == 0:
-            policy_loss = self.actor.train(self.critic.critic.get_Q(states, self.actor.policy(states)))
 
+        if i % self.args.policy_update_frequency == 0:
+            policy_loss = self.actor.train(self.critic.critic.get_Q(states, self.actor.policy(states)))
             self.critic.update_target()
             self.actor.update_target()
-        
+
+        return critic_loss, policy_loss
+
+    def train_HER(self):
+        states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
+        next_actions = self.actor.policy_target(next_states).detach()
+        critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
+        policy_loss = self.actor.train(self.critic.critic(states, self.actor.policy(states)))
+
+        self.critic.update_target()
+        self.actor.update_target()
+
         return critic_loss, policy_loss
 
     def noise_regularization(self, next_actions):
@@ -316,12 +341,3 @@ class DDPG(object):
         plt.grid()
         plt.savefig(filename, dpi=300)
         plt.show()
-            
-    def add_hindsight_replay_experience(self, states, actions):
-        """Relabels a trajectory using HER.
-
-        Args:
-            states: a list of states.
-            actions: a list of states.
-        """
-        raise NotImplementedError
