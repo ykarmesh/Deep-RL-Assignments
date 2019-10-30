@@ -225,16 +225,13 @@ class DDPG(object):
                 self.add_hindsight_replay_experience(trajectory_data)
 
             if self.memory.burned_in:
-                if self.args.algorithm == 'ddpg':
+                if self.args.algorithm in ['ddpg', 'her']:
                     critic_loss, policy_loss = self.train_DDPG()
                     self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
                 elif self.args.algorithm == 'td3':
                     critic_loss, policy_loss = self.train_TD3(i)
                     if i % self.args.policy_update_frequency == 0:
                         self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
-                elif self.args.algorithm == 'her':
-                    critic_loss, policy_loss = self.train_HER()
-                    self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
 
             # Logging
             if self.memory.burned_in and i % self.args.log_interval == 0:
@@ -308,17 +305,6 @@ class DDPG(object):
             policy_loss = self.actor.train(self.critic.critic.get_Q(states, self.actor.policy(states)))
             self.critic.update_target()
             self.actor.update_target()
-
-        return critic_loss, policy_loss
-
-    def train_HER(self):
-        states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
-        next_actions = self.actor.policy_target(next_states).detach()
-        critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
-        policy_loss = self.actor.train(self.critic.critic(states, self.actor.policy(states)))
-
-        self.critic.update_target()
-        self.actor.update_target()
 
         return critic_loss, policy_loss
 
