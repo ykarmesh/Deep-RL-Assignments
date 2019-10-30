@@ -211,8 +211,8 @@ class DDPG(object):
 
                 # Save data for HER.
                 if self.args.algorithm == 'her':
-                    trajectory_data.append([state.detach().numpy(), action.detach().numpy(),
-                        reward, next_state.detach().numpy(), done])
+                    trajectory_data.append([state.detach().cpu().numpy(), action.detach().cpu().numpy(),
+                        reward, next_state.detach().cpu().numpy(), done])
 
                 total_reward += reward
                 step += 1
@@ -273,7 +273,9 @@ class DDPG(object):
         # Relabels a trajectory using a new goal state.
         for state, action, reward, next_state, done in trajectory:
             state[-2:] = goal.copy()
+            next_state[-2:] = goal.copy()            
             reward = self.env._HER_calc_reward(state)
+            if reward == 0: done = True
 
             self.memory.add(
                 torch.tensor(state, device=self.device),
@@ -281,6 +283,8 @@ class DDPG(object):
                 torch.tensor(reward, device=self.device),
                 torch.tensor(next_state, device=self.device),
                 torch.tensor(done, device=self.device))
+
+            if reward == 0: break
 
     def train_DDPG(self):
         states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
