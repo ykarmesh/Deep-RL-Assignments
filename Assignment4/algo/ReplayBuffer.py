@@ -1,6 +1,7 @@
+import random
+
 import torch
 import numpy as np
-import random
 
 
 class ReplayBuffer(object):
@@ -58,4 +59,3 @@ class ReplayBuffer(object):
             return self.ptr
         else:
             return self.memory_size
-

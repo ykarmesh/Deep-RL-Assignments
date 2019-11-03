@@ -21,9 +21,7 @@ class Critic(nn.Module):
     def __init__(self, state_size, action_size, custom_init):
         super(Critic, self).__init__()
         self.linear1 = nn.Linear(state_size + action_size, HIDDEN1_UNITS)
-
         self.linear2 = nn.Linear(HIDDEN1_UNITS, HIDDEN2_UNITS)
-
         self.output = nn.Linear(HIDDEN2_UNITS, 1)
 
         if custom_init:
@@ -38,11 +36,9 @@ class Critic(nn.Module):
         x = torch.cat((x, action), 1)
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
-        
         x = self.output(x)
         return x
         
-
 
 class CriticNetwork(object):
     def __init__(self, state_size, action_size, batch_size,
@@ -137,30 +133,23 @@ class CriticTD3(nn.Module):
             nn.init.uniform_(self.output2.weight, a=-3*1e-3, b=3*1e-3)
 
     def forward(self, x, action):
-
         x = torch.cat((x, action), 1)
-        
         x1 = F.relu(self.linear1(x))
         x1 = F.relu(self.linear2(x1))
-
         x1 = self.output1(x1)
 
         x2 = F.relu(self.linear3(x))
         x2 = F.relu(self.linear4(x2))
-
         x2 = self.output2(x2)
         return x1, x2
 
     def get_Q(self, x, action):
-
         x = torch.cat((x, action), 1)
-        
         x1 = F.relu(self.linear1(x))
         x1 = F.relu(self.linear2(x1))
-
         x1 = self.output1(x1)
-
         return x1
+
 
 class CriticNetworkTD3(object):
     def __init__(self, state_size, action_size, batch_size,
@@ -182,7 +171,6 @@ class CriticNetworkTD3(object):
         self.batch_size = batch_size
         self.critic = CriticTD3(state_size, action_size, custom_init).to(device)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.lr)
-
         self.critic_target = copy.deepcopy(self.critic)
 
     def gradients(self, states, actions):

@@ -21,9 +21,7 @@ class Actor(nn.Module):
     def __init__(self, state_size, action_size, custom_init):
         super(Actor, self).__init__()
         self.linear1 = nn.Linear(state_size, HIDDEN1_UNITS)
-
         self.linear2 = nn.Linear(HIDDEN1_UNITS, HIDDEN2_UNITS)
-
         self.output = nn.Linear(HIDDEN2_UNITS, action_size)
 
         if custom_init:
@@ -33,7 +31,6 @@ class Actor(nn.Module):
             nn.init.uniform_(self.linear2.bias, a=-1/math.sqrt(HIDDEN1_UNITS), b=1/math.sqrt(HIDDEN1_UNITS))
             nn.init.uniform_(self.output.weight, a=-3*10e-3, b=3*10e-3)
             nn.init.uniform_(self.output.bias, a=-3*10e-3, b=3*10e-3)
-
 
     def forward(self, x):
         x = F.relu(self.linear1(x))
