@@ -81,10 +81,10 @@ class DDPG(object):
         self.action_selector = EpsilonNormalActionNoise(0, 0.05, self.args.epsilon)
         self.memory = ReplayBuffer(args.buffer_size, args.burn_in, state_dim, action_dim, self.device)
         self.actor = ActorNetwork(state_dim, action_dim, self.args.batch_size, self.args.tau, self.args.actor_lr, self.device, args.custom_init)
-        if self.args.train_ddpg:
+        if self.args.algorithm == 'ddpg' or self.args.algorithm == 'her':
             self.critic = CriticNetwork(state_dim, action_dim, self.args.batch_size,  \
                 self.args.tau, self.args.critic_lr, self.args.gamma, self.device, args.custom_init)
-        else:
+        elif self.args.algorithm == 'td3':
             self.critic = CriticNetworkTD3(state_dim, action_dim, self.args.batch_size,  \
                 self.args.tau, self.args.critic_lr, self.args.gamma, self.device, args.custom_init)
 
@@ -231,8 +231,10 @@ class DDPG(object):
 
             if self.memory.burned_in:
                 if self.args.algorithm in ['ddpg', 'her']:
-                    critic_loss, policy_loss = self.train_DDPG()
+                    critic_loss, policy_loss, new_metric = self.train_DDPG()
                     self.summary_writer.add_scalar('train/policy_loss', policy_loss, i)
+                    self.summary_writer.add_scalar('train/new_metric', new_metric.mean(), i)
+
                 elif self.args.algorithm == 'td3':
                     critic_loss, policy_loss = self.train_TD3(i)
                     if i % self.args.policy_update_frequency == 0:
@@ -292,15 +294,17 @@ class DDPG(object):
             if reward == 0: break
 
     def train_DDPG(self):
-        states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
-        next_actions = self.actor.policy_target(next_states).detach()
-        critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
-        policy_loss = self.actor.train(self.critic.critic(states, self.actor.policy(states)))
+        for j in range(self.args.num_update_iters):
+            states, actions, rewards, next_states, dones = self.memory.get_batch(self.args.batch_size)
+            next_actions = self.actor.policy_target(next_states).detach()
+            critic_loss = self.critic.train(states, actions, rewards, next_states, dones, next_actions)
+            new_Q_value = self.critic.critic(states, self.actor.policy(states))
+            policy_loss = self.actor.train(new_Q_value)
 
-        self.critic.update_target()
-        self.actor.update_target()
+            self.critic.update_target()
+            self.actor.update_target()
 
-        return critic_loss, policy_loss
+        return critic_loss, policy_loss, new_Q_value
     
     def train_TD3(self, i):
         for j in range(self.args.num_update_iters):
