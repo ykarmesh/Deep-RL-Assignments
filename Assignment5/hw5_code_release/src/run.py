@@ -4,6 +4,7 @@ import gym
 import envs
 import os.path as osp
 
+import torch
 from agent import Agent
 from mpc import MPC
 from model import PENN
@@ -123,10 +124,10 @@ class ExperimentModelDynamics:
 
 
 def test_cem_gt_dynamics(num_episode=10):
-    mpc_params = {'use_mpc': False, 'num_particles': 1}
-    exp = ExperimentGTDynamics(env_name='Pushing2D-v1', mpc_params=mpc_params)
-    avg_reward, avg_success = exp.test(num_episode)
-    print('CEM PushingEnv: avg_reward: {}, avg_success: {}'.format(avg_reward, avg_success))
+    # mpc_params = {'use_mpc': False, 'num_particles': 1}
+    # exp = ExperimentGTDynamics(env_name='Pushing2D-v1', mpc_params=mpc_params)
+    # avg_reward, avg_success = exp.test(num_episode)
+    # print('CEM PushingEnv: avg_reward: {}, avg_success: {}'.format(avg_reward, avg_success))
 
     # mpc_params = {'use_mpc': True, 'num_particles': 1}
     # exp = ExperimentGTDynamics(env_name='Pushing2D-v1', mpc_params=mpc_params)
@@ -138,10 +139,10 @@ def test_cem_gt_dynamics(num_episode=10):
     # avg_reward, avg_success = exp.test(num_episode)
     # print('CEM PushingEnv Noisy: avg_reward: {}, avg_success: {}'.format(avg_reward, avg_success))
     #
-    # mpc_params = {'use_mpc': True, 'num_particles': 1}
-    # exp = ExperimentGTDynamics(env_name='Pushing2DNoisyControl-v1', mpc_params=mpc_params)
-    # avg_reward, avg_success = exp.test(num_episode)
-    # print('MPC PushingEnv Noisy: avg_reward: {}, avg_success: {}'.format(avg_reward, avg_success))
+    mpc_params = {'use_mpc': True, 'num_particles': 1}
+    exp = ExperimentGTDynamics(env_name='Pushing2DNoisyControl-v1', mpc_params=mpc_params)
+    avg_reward, avg_success = exp.test(num_episode)
+    print('MPC PushingEnv Noisy: avg_reward: {}, avg_success: {}'.format(avg_reward, avg_success))
 
     # mpc_params = {'use_mpc': False, 'num_particles': 1}
     # exp = ExperimentGTDynamics(env_name='Pushing2D-v1', mpc_params=mpc_params)
@@ -156,9 +157,9 @@ def test_cem_gt_dynamics(num_episode=10):
 
 def train_single_dynamics(num_test_episode=50):
     num_nets = 1
-    num_episodes = 1000
+    num_episodes = 1 #temp
     num_epochs = 100
-    mpc_params = {'use_mpc': True, 'num_particles': 6}
+    mpc_params = {'use_mpc': False, 'num_particles': 6} #temp
     exp = ExperimentModelDynamics(env_name='Pushing2D-v1', num_nets=num_nets, mpc_params=mpc_params)
     exp.model_warmup(num_episodes=num_episodes, num_epochs=num_epochs)
 
@@ -180,6 +181,6 @@ def train_pets():
 
 
 if __name__ == "__main__":
-    test_cem_gt_dynamics(50)
+    # test_cem_gt_dynamics(50)
     train_single_dynamics(50)
     train_pets()

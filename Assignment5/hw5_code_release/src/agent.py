@@ -1,4 +1,5 @@
 import numpy as np
+import pdb
 
 
 class Agent:
@@ -18,8 +19,10 @@ class Agent:
         policy.goal = states[0][-2:]
         policy.reset()
         for t in range(horizon):
-            # print('time step: {}/{}'.format(t, horizon))
+            print('time step: {}/{}'.format(t, horizon))
+            # pdb.set_trace()
             actions.append(policy.act(states[t], t))
+
             state, reward, done, info = self.env.step(actions[t])
             states.append(state)
             reward_sum += reward

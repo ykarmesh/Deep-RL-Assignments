@@ -16,7 +16,7 @@ class RandomOptimizer:
         states = np.tile(state, (self.popsize,1)) #check this
         cost = np.zeros((self.popsize,1))
         # 
-        actions = np.array([np.random.multivariate_normal(mu[i], sigma[i], self.popsize) for i in range(self.plan_horizon)])
+        actions =  np.clip(np.array([np.random.multivariate_normal(mu[i], sigma[i], self.popsize) for i in range(self.plan_horizon)]), self.MPC.ac_lb, self.MPC.ac_ub)
         for j in range(self.plan_horizon):
             next_states = np.array(self.MPC.predict_next_state(states, actions[j, :, :].squeeze()))
             for k in range(self.popsize):
@@ -24,7 +24,6 @@ class RandomOptimizer:
             states = copy.deepcopy(next_states)
         
         best_idx = np.argmin(cost)
-        # pdb.set_trace()
 
         return actions[:, best_idx, :]
 
@@ -43,14 +42,14 @@ class CEMOptimizer:
         for i in range(self.max_iters):
             states = np.tile(state, (self.popsize,1))
             cost = np.zeros((self.popsize,1))
-            actions = np.array([np.random.multivariate_normal(mu[i], sigma[i], self.popsize) for i in range(self.plan_horizon)])
+            actions = np.clip(np.array([np.random.multivariate_normal(mu[i], sigma[i], self.popsize) for i in range(self.plan_horizon)]), self.MPC.ac_lb, self.MPC.ac_ub)
             for j in range(self.plan_horizon):
                 next_states = np.array(self.MPC.predict_next_state(states, actions[j, :, :].squeeze()))
                 for k in range(len(next_states)):
                     cost[k] += self.MPC.obs_cost_fn(next_states[k])
                 states = copy.deepcopy(next_states)
             
-            mu, sigma = self.get_fit_population(cost, actions)
+            mu, _ = self.get_fit_population(cost, actions)
 
         return mu
 
@@ -145,9 +144,8 @@ class MPC:
 
     def predict_next_state_model(self, states, actions):
         """ Given a list of state action pairs, use the learned model to predict the next state"""
-        # TODO: write your code her
-
-        raise NotImplementedError
+        next_states = self.model.get_nxt_state(states, actions)
+        return next_states
 
     def predict_next_state_gt(self, states, actions):
         """ Given a list of state action pairs, use the ground truth dynamics to predict the next state"""
@@ -165,8 +163,10 @@ class MPC:
           rews_trajs: rewards (NOTE: this may not be used)
           epochs: number of epochs to train for
         """
-        # TODO: write your code here
-        raise NotImplementedError
+        inputs = obs_trajs[0][:-1]
+        inputs[:,-2:] = acs_trajs[0]
+        targets = obs_trajs[0][1:,:8]
+        self.model.train(inputs, targets, epochs=epochs)
 
     def reset(self):
         # TODO: write your code here
@@ -184,9 +184,8 @@ class MPC:
         """
         # TODO: write your code here
         if not self.use_mpc:
-            # pdb.set_trace()
             if t%self.plan_horizon == 0:
-                self.reset()
+                # self.reset()
                 self.planned_actions = self.policy.act(self.mean, self.cov, state)
                 i = 0
             else:
