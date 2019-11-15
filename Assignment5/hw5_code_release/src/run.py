@@ -3,6 +3,8 @@ import numpy as np
 import gym
 import envs
 import os.path as osp
+from datetime import datetime
+from tensorboardX import SummaryWriter
 
 import torch
 from agent import Agent
@@ -56,13 +58,21 @@ class ExperimentGTDynamics(object):
 class ExperimentModelDynamics:
     def __init__(self, env_name='Pushing2D-v1', num_nets=1, mpc_params=None):
         self.env = gym.make(env_name)
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cpu')
+
 
         self.task_horizon = TASK_HORIZON
 
+        # Tensorboard logging.
+        self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        self.environment_name = "pusher"
+        self.logdir = 'logs/%s/%s' % (self.environment_name, self.timestamp)
+        self.summary_writer = SummaryWriter(self.logdir)
+
         self.agent = Agent(self.env)
         mpc_params['use_gt_dynamics'] = False
-        self.model = PENN(num_nets, STATE_DIM, len(self.env.action_space.sample()), LR, self.device)
+        self.model = PENN(num_nets, STATE_DIM, len(self.env.action_space.sample()), LR, self.device, self.summary_writer, self.timestamp, self.environment_name)
         self.cem_policy = MPC(self.env, PLAN_HORIZON, self.model, POPSIZE, NUM_ELITES, MAX_ITERS, use_random_optimizer=False, **mpc_params)
         self.random_policy = MPC(self.env, PLAN_HORIZON, self.model, POPSIZE, NUM_ELITES, MAX_ITERS, use_random_optimizer=True, **mpc_params)
 
@@ -183,4 +193,4 @@ def train_pets():
 if __name__ == "__main__":
     # test_cem_gt_dynamics(50)
     train_single_dynamics(50)
-    train_pets()
+    # train_pets()

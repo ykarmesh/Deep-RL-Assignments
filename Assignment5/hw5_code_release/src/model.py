@@ -3,7 +3,6 @@
 # from keras.models import Model
 # from keras.regularizers import l2
 # import keras.backend as K
-from datetime import datetime
 import os
 import sys
 import pdb
@@ -16,7 +15,6 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.utils.data import Dataset, DataLoader
-from tensorboardX import SummaryWriter
 
 from util import ZFilter
 
@@ -64,7 +62,7 @@ class PENN:
     (P)robabilistic (E)nsemble of (N)eural (N)etworks
     """
 
-    def __init__(self, num_nets, state_dim, action_dim, learning_rate, device, loading_weights_path=None):
+    def __init__(self, num_nets, state_dim, action_dim, learning_rate, device, summary_writer, timestamp, environment_name, loading_weights_path=None):
         """
         :param num_nets: number of networks in the ensemble
         :param state_dim: state dimension
@@ -81,6 +79,8 @@ class PENN:
         self.max_logvar = -3*torch.ones((1, self.state_dim), device=self.device).float()
         self.min_logvar = -7*torch.ones((1, self.state_dim), device=self.device).float()
 
+        self.total_epochs = 0
+
         # TODO write your code here
         # Create and initialize your model
         self.models = []
@@ -89,10 +89,10 @@ class PENN:
             self.models.append(Model(self.state_dim, self.action_dim).to(self.device))
             self.optimizers.append(optim.Adam(self.models[-1].parameters(), lr=learning_rate, weight_decay=1e-4))
 
-        self.timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        self.environment_name = "pusher"
-        self.weights_path = 'models/%s/%s' % (self.environment_name, self.timestamp)
+        self.weights_path = 'models/%s/%s' % (environment_name, timestamp)
         if self.loading_weights_path: self.load_model()
+        self.summary_writer = summary_writer
+        
 
     def save_model(self, epoch):
         '''Helper function to save model state and weights.'''
@@ -160,12 +160,18 @@ class PENN:
                 loader = DataLoader(transition_dataset, batch_size=128, shuffle=True)
                 for k, (x, target) in enumerate(loader):
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
-                    loss = torch.sum(torch.sum((mean-targets)**2/torch.exp(logvar),1) + torch.log(torch.prod(torch.exp(logvar), 1)))
+                    rmse_error = (mean-targets)**2
+                    loss = torch.sum(torch.sum(rmse_error/torch.exp(logvar),1) + torch.log(torch.prod(torch.exp(logvar), 1)))
                     # loss = torch.t(mean-targets)*torch.diag(torch.exp(logvar))*(mean-targets) + torch.log(torch.det(torch.exp(logvar)))
                     loss.backward()
                     self.optimizers[j].step()
-            if(i%5):
-                self.save_model(i)
+
+                    self.summary_writer.add_scalar('train/loss', loss, self.total_epochs)
+                    self.summary_writer.add_scalar('train/rmse_error', torch.sum(rmse_error), self.total_epochs)
+
+            if(self.total_epochs%5):
+                self.save_model(self.total_epochs)
+            self.total_epochs += 1
 
     def get_nxt_state(self, state, action):
         """
