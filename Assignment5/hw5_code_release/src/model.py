@@ -160,14 +160,15 @@ class PENN:
                 loader = DataLoader(transition_dataset, batch_size=128, shuffle=True)
                 for k, (x, target) in enumerate(loader):
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
-                    rmse_error = (mean-targets)**2
-                    loss = torch.sum(torch.sum(rmse_error/torch.exp(logvar),1) + torch.log(torch.prod(torch.exp(logvar), 1)))
+                    error_sq = (mean-targets)**2
+                    import pdb; pdb.set_trace()
+                    loss = torch.mean(torch.sum(error_sq/torch.exp(logvar),1) + torch.log(torch.prod(torch.exp(logvar), 1)))
                     # loss = torch.t(mean-targets)*torch.diag(torch.exp(logvar))*(mean-targets) + torch.log(torch.det(torch.exp(logvar)))
                     loss.backward()
                     self.optimizers[j].step()
-
+                    rmse_error = torch.mean(torch.sqrt(torch.mean(error_sq, dim=1)))
                     self.summary_writer.add_scalar('train/loss', loss, self.total_epochs)
-                    self.summary_writer.add_scalar('train/rmse_error', torch.sum(rmse_error), self.total_epochs)
+                    self.summary_writer.add_scalar('train/rmse_error', rmse_error, self.total_epochs)
 
             if(self.total_epochs%5):
                 self.save_model(self.total_epochs)
