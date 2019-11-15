@@ -189,6 +189,13 @@ class PENN:
             next_state = self.sample_next_state(state, action).cpu().numpy().squeeze()
         # except:
         return next_state
+    
+    def TS1(self, num_particles, horizon):
+        s = np.zeros((num_particles, horizon))
+        for p in num_particles:
+            s[p,:] = np.random.randint(0, self.num_nets-1)
+        return s
+
 
     # TODO: Write any helper functions that you need
 
