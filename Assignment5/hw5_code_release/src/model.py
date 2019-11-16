@@ -136,8 +136,17 @@ class PENN:
         return mean, logvar
 
     def sample_next_state(self, state, action):
-        # pdb.set_trace()
-        mean, logvar = self.get_output(self.models[0](state, action))
+        model_idx = torch.randint(self.num_nets, [state.shape[0]])
+        means = []; logvars=[]
+        for i in range(self.num_nets):
+            mean, logvar = self.get_output(self.models[i](state, action))
+            means.append(mean)
+            logvars.append(logvar)
+        means = torch.stack(means)
+        logvars = torch.stack(logvars)
+        mean = means[model_idx, torch.arange(state.shape[0]),:]
+        logvar = logvars[model_idx, torch.arange(state.shape[0]),:]
+
         sample_states = []
         
         normal_dist = Normal(mean.flatten(), torch.exp(logvar).flatten())
@@ -196,12 +205,6 @@ class PENN:
             next_state = self.sample_next_state(state, action).cpu().numpy().squeeze()
         # except:
         return next_state
-    
-    def TS1(self, num_particles, horizon):
-        s = np.zeros((num_particles, horizon))
-        for p in num_particles:
-            s[p,:] = np.random.randint(0, self.num_nets-1)
-        return s
 
 
     # TODO: Write any helper functions that you need

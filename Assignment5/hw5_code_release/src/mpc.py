@@ -37,16 +37,18 @@ class CEMOptimizer:
         self.plan_horizon = MPC.plan_horizon
         self.popsize = MPC.popsize
         self.num_elites = MPC.num_elites
+        self.num_trajectories = 6 if not self.MPC.use_gt_dynamics else 1
 
     def act(self, mu, sigma, state): #check this
         for i in range(self.max_iters):
-            states = np.tile(state, (self.popsize,1))
+            states = np.tile(state, (self.popsize, self.num_trajectories))
             cost = np.zeros((self.popsize,1))
             actions = np.clip(np.array([np.random.multivariate_normal(mu[i], sigma[i], self.popsize) for i in range(self.plan_horizon)]), self.MPC.ac_lb, self.MPC.ac_ub)
             for j in range(self.plan_horizon):
                 next_states = np.array(self.MPC.predict_next_state(states, actions[j, :, :].squeeze()))
                 for k in range(len(next_states)):
-                    cost[k] += self.MPC.obs_cost_fn(next_states[k])
+                    cost[k%self.popsize] += self.MPC.obs_cost_fn(next_states[k])
+                cost = len(next_states)/self.popsize
                 states = copy.deepcopy(next_states)
             
             mu, _ = self.get_fit_population(cost, actions)
