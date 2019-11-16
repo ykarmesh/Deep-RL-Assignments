@@ -19,7 +19,7 @@ class Agent:
         policy.goal = states[0][-2:]
         policy.reset()
         for t in range(horizon):
-            print('time step: {}/{}'.format(t, horizon))
+            # print('time step: {}/{}'.format(t, horizon))
             # pdb.set_trace()
             actions.append(policy.act(states[t], t))
 
@@ -28,7 +28,7 @@ class Agent:
             reward_sum += reward
             rewards.append(reward)
             if done:
-                # print(info['done'])
+                print(info['done'])
                 break
 
         # print("Rollout length: ", len(actions))

@@ -1,4 +1,4 @@
-# import tensorflow as tf
+    # import tensorflow as tf
 # from keras.layers import Dense, Flatten, Input, Concatenate, Lambda, Activation
 # from keras.models import Model
 # from keras.regularizers import l2
@@ -154,25 +154,34 @@ class PENN:
         inputs = torch.tensor(inputs, device=self.device).float()
         targets = torch.tensor(targets, device=self.device).float()
 
+
+
         transition_dataset = StoredData(inputs, targets)
         for i in range(epochs):
+            total_loss = []
+            total_rmse = []
+
             for j in range(self.num_nets):
                 loader = DataLoader(transition_dataset, batch_size=128, shuffle=True)
                 for k, (x, target) in enumerate(loader):
+                    self.optimizers[j].zero_grad()
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
                     error_sq = (mean-targets)**2
-                    import pdb; pdb.set_trace()
                     loss = torch.mean(torch.sum(error_sq/torch.exp(logvar),1) + torch.log(torch.prod(torch.exp(logvar), 1)))
                     # loss = torch.t(mean-targets)*torch.diag(torch.exp(logvar))*(mean-targets) + torch.log(torch.det(torch.exp(logvar)))
                     loss.backward()
                     self.optimizers[j].step()
-                    rmse_error = torch.mean(torch.sqrt(torch.mean(error_sq, dim=1)))
-                    self.summary_writer.add_scalar('train/loss', loss, self.total_epochs)
-                    self.summary_writer.add_scalar('train/rmse_error', rmse_error, self.total_epochs)
 
-            if(self.total_epochs%5):
-                self.save_model(self.total_epochs)
+                    rmse_error = torch.mean(torch.sqrt(torch.mean(error_sq, dim=1)))
+                    total_loss.append(loss.detach().cpu().numpy())
+                    total_rmse.append(rmse_error.detach().cpu().numpy())
+
+            self.summary_writer.add_scalar('train/loss', np.mean(total_loss, 0), self.total_epochs)
+            self.summary_writer.add_scalar('train/rmse_error', np.mean(total_rmse, 0), self.total_epochs)
             self.total_epochs += 1
+
+            if(self.total_epochs%5 == 0):
+                self.save_model(self.total_epochs)
 
     def get_nxt_state(self, state, action):
         """
