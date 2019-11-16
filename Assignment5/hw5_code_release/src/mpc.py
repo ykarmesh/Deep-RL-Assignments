@@ -53,9 +53,6 @@ class CEMOptimizer:
                     cost[k%self.popsize] += self.MPC.obs_cost_fn(next_states[k])
                 cost = cost/self.num_trajectories
                 states = copy.deepcopy(next_states)
-            
-            mu, _ = self.get_fit_population(cost, actions)
-
         return mu
 
     def get_fit_population(self, cost, actions):
