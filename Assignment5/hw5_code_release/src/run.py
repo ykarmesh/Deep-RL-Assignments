@@ -128,10 +128,15 @@ class ExperimentModelDynamics:
             )
 
             if (i + 1) % evaluation_interval == 0:
-                avg_return, avg_success = self.test(50, optimizer='cem')
+                cem_avg_return, cem_avg_success = self.test(50, optimizer='cem')
                 print('Test success CEM + MPC:', avg_success)
-                avg_return, avg_success = self.test(50, optimizer='random')
+                rand_avg_return, rand_avg_success = self.test(50, optimizer='random')
                 print('Test success Random + MPC:', avg_success)
+
+                self.summary_writer.add_scalar("CEM-AverageSuccess", cem_avg_success, 5*i)
+                self.summary_writer.add_scalar("Rand-AverageSuccess", rand_avg_success, 5*i)
+                self.summary_writer.add_scalar("CEM-AverageReturn", cem_avg_return, 5*i)
+                self.summary_writer.add_scalar("Rand-AverageReturn", rand_avg_return, 5*i)
 
 
 def test_cem_gt_dynamics(num_episode=10):
