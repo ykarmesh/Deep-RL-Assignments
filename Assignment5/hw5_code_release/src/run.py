@@ -131,9 +131,9 @@ class ExperimentModelDynamics:
 
             if (i + 1) % evaluation_interval == 0:
                 cem_avg_return, cem_avg_success = self.test(20, optimizer='cem')
-                print('Test success CEM + MPC:', avg_success)
+                print('Test success CEM + MPC:', cem_avg_success)
                 rand_avg_return, rand_avg_success = self.test(20, optimizer='random')
-                print('Test success Random + MPC:', avg_success)
+                print('Test success Random + MPC:', rand_avg_success)
 
                 self.summary_writer.add_scalar("CEM-AverageSuccess", cem_avg_success, i)
                 self.summary_writer.add_scalar("Rand-AverageSuccess", rand_avg_success, i)
