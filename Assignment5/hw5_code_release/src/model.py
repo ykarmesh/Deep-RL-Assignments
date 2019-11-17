@@ -155,13 +155,13 @@ class PENN:
         targets = torch.tensor(targets, device=self.device).float()
 
         transition_dataset = StoredData(inputs, targets)
+        sampler = RandomSampler(transition_dataset, replacement=True)
+        loader = DataLoader(transition_dataset, batch_size=128, sampler=sampler)
         for i in range(epochs):
             total_loss = []
             total_rmse = []
 
             for j in range(self.num_nets):
-                sampler = RandomSampler(transition_dataset, replacement=True)
-                loader = DataLoader(transition_dataset, batch_size=128, sampler=sampler)
                 for k, (x, target) in enumerate(loader):
                     self.optimizers[j].zero_grad()
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
