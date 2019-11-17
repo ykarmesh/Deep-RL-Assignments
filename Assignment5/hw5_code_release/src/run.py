@@ -200,5 +200,5 @@ def train_pets():
 
 if __name__ == "__main__":
     # test_cem_gt_dynamics(50)
-    train_single_dynamics(50)
-    # train_pets()
+    # train_single_dynamics(50)
+    train_pets()
