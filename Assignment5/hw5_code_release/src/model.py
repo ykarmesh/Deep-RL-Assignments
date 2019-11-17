@@ -13,8 +13,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.distributions.multivariate_normal import MultivariateNormal
-from torch.utils.data import Dataset, DataLoader
+from torch.distributions.normal import Normal
+from torch.utils.data import Dataset, DataLoader, RandomSampler
 
 from util import ZFilter
 
@@ -139,10 +139,10 @@ class PENN:
         # pdb.set_trace()
         mean, logvar = self.get_output(self.models[0](state, action))
         sample_states = []
-        for i in range(len(mean)):
-            mv_normal = MultivariateNormal(mean[i].squeeze(), torch.diag(torch.exp(logvar[i].squeeze())))
-            sample_states.append(mv_normal.rsample())
-        return torch.stack(sample_states)
+        
+        normal_dist = Normal(mean.flatten(), torch.exp(logvar).flatten())
+        sample_states = normal_dist.sample().view(state.shape)
+        return sample_states
         
 
     def train(self, inputs, targets, batch_size=128, epochs=5):
@@ -154,15 +154,14 @@ class PENN:
         inputs = torch.tensor(inputs, device=self.device).float()
         targets = torch.tensor(targets, device=self.device).float()
 
-
-
         transition_dataset = StoredData(inputs, targets)
+        sampler = RandomSampler(transition_dataset, replacement=True)
+        loader = DataLoader(transition_dataset, batch_size=128, sampler=sampler)
         for i in range(epochs):
             total_loss = []
             total_rmse = []
 
             for j in range(self.num_nets):
-                loader = DataLoader(transition_dataset, batch_size=128, shuffle=True)
                 for k, (x, target) in enumerate(loader):
                     self.optimizers[j].zero_grad()
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
