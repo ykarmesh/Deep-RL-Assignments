@@ -41,14 +41,17 @@ class CEMOptimizer:
 
     def act(self, mu, sigma, state): #check this
         for i in range(self.max_iters):
-            states = np.tile(state, (self.popsize, self.num_trajectories))
+            states = np.tile(state, (self.popsize, 1))
+            states = np.tile(states, (self.num_trajectories,1))
             cost = np.zeros((self.popsize,1))
             actions = np.clip(np.array([np.random.multivariate_normal(mu[i], sigma[i], self.popsize) for i in range(self.plan_horizon)]), self.MPC.ac_lb, self.MPC.ac_ub)
             for j in range(self.plan_horizon):
-                next_states = np.array(self.MPC.predict_next_state(states, actions[j, :, :].squeeze()))
+                action_this_step = actions[j, :, :].squeeze()
+                action_this_step = np.tile(action_this_step, (self.num_trajectories,1))
+                next_states = np.array(self.MPC.predict_next_state(states, action_this_step)) # need to send appropriate action.
                 for k in range(len(next_states)):
                     cost[k%self.popsize] += self.MPC.obs_cost_fn(next_states[k])
-                cost = len(next_states)/self.popsize
+                cost = cost/self.num_trajectories
                 states = copy.deepcopy(next_states)
             
             mu, _ = self.get_fit_population(cost, actions)
