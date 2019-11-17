@@ -37,7 +37,7 @@ class CEMOptimizer:
         self.plan_horizon = MPC.plan_horizon
         self.popsize = MPC.popsize
         self.num_elites = MPC.num_elites
-        self.num_trajectories = 6 if not self.MPC.use_gt_dynamics else 1
+        self.num_trajectories = self.MPC.num_particles if not self.MPC.use_gt_dynamics else 1
 
     def act(self, mu, sigma, state): #check this
         for i in range(self.max_iters):
