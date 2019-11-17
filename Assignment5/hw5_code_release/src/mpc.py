@@ -163,9 +163,13 @@ class MPC:
           rews_trajs: rewards (NOTE: this may not be used)
           epochs: number of epochs to train for
         """
-        inputs = obs_trajs[0][:-1]
-        inputs[:,-2:] = acs_trajs[0]
-        targets = obs_trajs[0][1:,:8]
+        obs_trajs_inputs = [obs_traj[:-1,:] for obs_traj in obs_trajs]
+        obs_trajs_targets = [obs_traj[1:,:8] for obs_traj in obs_trajs]
+        acs_trajs = np.concatenate(acs_trajs)
+
+        inputs = np.concatenate(obs_trajs_inputs)
+        inputs[:,-2:] = acs_trajs
+        targets = np.concatenate(obs_trajs_targets)
         self.model.train(inputs, targets, epochs=epochs)
 
     def reset(self):

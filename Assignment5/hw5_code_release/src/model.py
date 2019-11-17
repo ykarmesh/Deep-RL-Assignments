@@ -153,7 +153,6 @@ class PENN:
         """        
         inputs = torch.tensor(inputs, device=self.device).float()
         targets = torch.tensor(targets, device=self.device).float()
-
         transition_dataset = StoredData(inputs, targets)
         sampler = RandomSampler(transition_dataset, replacement=True)
         loader = DataLoader(transition_dataset, batch_size=128, sampler=sampler)
@@ -165,9 +164,9 @@ class PENN:
                 for k, (x, target) in enumerate(loader):
                     self.optimizers[j].zero_grad()
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
-                    error_sq = (mean-targets)**2
+                    error_sq = (mean-target)**2
                     loss = torch.mean(torch.sum(error_sq/torch.exp(logvar),1) + torch.log(torch.prod(torch.exp(logvar), 1)))
-                    # loss = torch.t(mean-targets)*torch.diag(torch.exp(logvar))*(mean-targets) + torch.log(torch.det(torch.exp(logvar)))
+                    # loss = torch.t(mean-target)*torch.diag(torch.exp(logvar))*(mean-target) + torch.log(torch.det(torch.exp(logvar)))
                     loss.backward()
                     self.optimizers[j].step()
 
