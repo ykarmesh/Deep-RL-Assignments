@@ -146,8 +146,6 @@ class PENN:
         logvars = torch.stack(logvars)
         mean = means[model_idx, torch.arange(state.shape[0]),:]
         logvar = logvars[model_idx, torch.arange(state.shape[0]),:]
-
-        sample_states = []
         
         normal_dist = Normal(mean.flatten(), torch.exp(logvar).flatten())
         sample_states = normal_dist.sample().view(state.shape)
