@@ -164,10 +164,11 @@ class PENN:
         sampler = RandomSampler(transition_dataset, replacement=True)
         loader = DataLoader(transition_dataset, batch_size=128, sampler=sampler)
         for i in range(epochs):
-            total_loss = []
-            total_rmse = []
-
+            total_loss_epochs = []
+            total_rmse_epochs = []
             for j in range(self.num_nets):
+                total_loss = []
+                total_rmse = []
                 for k, (x, target) in enumerate(loader):
                     self.optimizers[j].zero_grad()
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
@@ -180,12 +181,15 @@ class PENN:
                     rmse_error = torch.mean(torch.sqrt(torch.mean(error_sq, dim=1)))
                     total_loss.append(loss.detach().cpu().numpy())
                     total_rmse.append(rmse_error.detach().cpu().numpy())
-
-            self.summary_writer.add_scalar('train/loss', np.mean(total_loss, 0), self.total_epochs)
-            self.summary_writer.add_scalar('train/rmse_error', np.mean(total_rmse, 0), self.total_epochs)
+                self.summary_writer.add_scalar('train/loss_'+str(j), np.mean(total_loss, 0), self.total_epochs)
+                self.summary_writer.add_scalar('train/rmse_error_'+str(j), np.mean(total_rmse, 0), self.total_epochs)
+                total_loss_epochs.append(np.mean(total_loss, 0))
+                total_rmse_epochs.append(np.mean(total_rmse, 0))
+            self.summary_writer.add_scalar('train/loss', np.mean(total_loss_epochs, 0), self.total_epochs)
+            self.summary_writer.add_scalar('train/rmse_error', np.mean(total_rmse_epochs, 0), self.total_epochs)
             self.total_epochs += 1
 
-            if(self.total_epochs%5 == 0):
+            if(self.total_epochs%100 == 0):
                 self.save_model(self.total_epochs)
 
     def get_nxt_state(self, state, action):
