@@ -13,9 +13,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.distributions.multivariate_normal import MultivariateNormal
 from torch.distributions.normal import Normal
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, RandomSampler
 
 from util import ZFilter
 
@@ -155,15 +154,14 @@ class PENN:
         inputs = torch.tensor(inputs, device=self.device).float()
         targets = torch.tensor(targets, device=self.device).float()
 
-
-
         transition_dataset = StoredData(inputs, targets)
         for i in range(epochs):
             total_loss = []
             total_rmse = []
 
             for j in range(self.num_nets):
-                loader = DataLoader(transition_dataset, batch_size=128, shuffle=True)
+                sampler = RandomSampler(transition_dataset, replacement=True)
+                loader = DataLoader(transition_dataset, batch_size=128, sampler=sampler)
                 for k, (x, target) in enumerate(loader):
                     self.optimizers[j].zero_grad()
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
