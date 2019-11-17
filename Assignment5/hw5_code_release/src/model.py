@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions.multivariate_normal import MultivariateNormal
+from torch.distributions.normal import Normal
 from torch.utils.data import Dataset, DataLoader
 
 from util import ZFilter
@@ -139,10 +140,10 @@ class PENN:
         # pdb.set_trace()
         mean, logvar = self.get_output(self.models[0](state, action))
         sample_states = []
-        for i in range(len(mean)):
-            mv_normal = MultivariateNormal(mean[i].squeeze(), torch.diag(torch.exp(logvar[i].squeeze())))
-            sample_states.append(mv_normal.rsample())
-        return torch.stack(sample_states)
+        
+        normal_dist = Normal(mean.flatten(), torch.exp(logvar).flatten())
+        sample_states = normal_dist.sample().view(state.shape)
+        return sample_states
         
 
     def train(self, inputs, targets, batch_size=128, epochs=5):
