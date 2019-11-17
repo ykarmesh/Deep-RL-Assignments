@@ -7,7 +7,7 @@ from datetime import datetime
 from tensorboardX import SummaryWriter
 
 import torch
-from agent import Agent
+from agent import Agent, RandomPolicy
 from mpc import MPC
 from model import PENN
 
@@ -75,6 +75,7 @@ class ExperimentModelDynamics:
         self.model = PENN(num_nets, STATE_DIM, len(self.env.action_space.sample()), LR, self.device, self.summary_writer, self.timestamp, self.environment_name)
         self.cem_policy = MPC(self.env, PLAN_HORIZON, self.model, POPSIZE, NUM_ELITES, MAX_ITERS, use_random_optimizer=False, **mpc_params)
         self.random_policy = MPC(self.env, PLAN_HORIZON, self.model, POPSIZE, NUM_ELITES, MAX_ITERS, use_random_optimizer=True, **mpc_params)
+        self.random_policy_no_mpc = RandomPolicy(len(self.env.action_space.sample()))
 
     def test(self, num_episodes, optimizer='cem'):
         samples = []
@@ -87,6 +88,7 @@ class ExperimentModelDynamics:
             print('Test episode {}: {}'.format(j, samples[-1]["rewards"][-1]))
         avg_return = np.mean([sample["reward_sum"] for sample in samples])
         avg_success = np.mean([sample["rewards"][-1] == 0 for sample in samples])
+        print('MPC PushingEnv: avg_reward: {}, avg_success: {}'.format(avg_return, avg_success))
         return avg_return, avg_success
 
     def model_warmup(self, num_episodes, num_epochs):
@@ -95,7 +97,7 @@ class ExperimentModelDynamics:
         samples = []
         for i in range(num_episodes):
             print("Warmup Episode %d" % (i+1))
-            samples.append(self.agent.sample(self.task_horizon, self.random_policy))
+            samples.append(self.agent.sample(self.task_horizon, self.random_policy_no_mpc))
 
         self.cem_policy.train(
             [sample["obs"] for sample in samples],
