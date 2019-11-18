@@ -90,8 +90,6 @@ class ExperimentModelDynamics:
         avg_return = np.mean([sample["reward_sum"] for sample in samples])
         avg_success = np.mean([sample["rewards"][-1] == 0 for sample in samples])
         print('MPC PushingEnv: avg_reward: {}, avg_success: {}'.format(avg_return, avg_success))
-        self.summary_writer.add_scalar("test/MPC-AverageSuccess", avg_success, 1)
-        self.summary_writer.add_scalar("test/MPC-AverageReturn", avg_return, 1)
         return avg_return, avg_success
 
     def model_warmup(self, num_episodes, num_epochs):
@@ -111,18 +109,19 @@ class ExperimentModelDynamics:
 
     def train(self, num_train_epochs, num_episodes_per_epoch, evaluation_interval):
         """ Jointly training the model and the policy """
-
+        samples = []
         for i in range(num_train_epochs):
             print("####################################################################")
             print("Starting training epoch %d." % (i + 1))
 
-            samples = []
+            
             for j in range(num_episodes_per_epoch):
-                samples.append(
-                    self.agent.sample(
+                new_sample = self.agent.sample(
                         self.task_horizon, self.cem_policy
                     )
-                )
+                samples.append(new_sample)
+            if(len(samples)>10*num_episodes_per_epoch):
+                samples = samples[num_episodes_per_epoch:]
             print("Rewards obtained:", [sample["reward_sum"] for sample in samples])
 
             self.cem_policy.train(
