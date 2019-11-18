@@ -90,6 +90,8 @@ class ExperimentModelDynamics:
         avg_return = np.mean([sample["reward_sum"] for sample in samples])
         avg_success = np.mean([sample["rewards"][-1] == 0 for sample in samples])
         print('MPC PushingEnv: avg_reward: {}, avg_success: {}'.format(avg_return, avg_success))
+        self.summary_writer.add_scalar("test/MPC-AverageSuccess", avg_success, 1)
+        self.summary_writer.add_scalar("test/MPC-AverageReturn", avg_return, 1)
         return avg_return, avg_success
 
     def model_warmup(self, num_episodes, num_epochs):
@@ -136,10 +138,10 @@ class ExperimentModelDynamics:
                 rand_avg_return, rand_avg_success = self.test(20, optimizer='random')
                 print('Test success Random + MPC:', rand_avg_success)
 
-                self.summary_writer.add_scalar("CEM-AverageSuccess", cem_avg_success, i)
-                self.summary_writer.add_scalar("Rand-AverageSuccess", rand_avg_success, i)
-                self.summary_writer.add_scalar("CEM-AverageReturn", cem_avg_return, i)
-                self.summary_writer.add_scalar("Rand-AverageReturn", rand_avg_return, i)
+                self.summary_writer.add_scalar("test/CEM-AverageSuccess", cem_avg_success, i)
+                self.summary_writer.add_scalar("test/Rand-AverageSuccess", rand_avg_success, i)
+                self.summary_writer.add_scalar("test/CEM-AverageReturn", cem_avg_return, i)
+                self.summary_writer.add_scalar("test/Rand-AverageReturn", rand_avg_return, i)
 
 
 def test_cem_gt_dynamics(num_episode=10):
