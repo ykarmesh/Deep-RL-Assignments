@@ -5,6 +5,7 @@ import envs
 import os.path as osp
 from datetime import datetime
 from tensorboardX import SummaryWriter
+import sys
 
 import torch
 from agent import Agent, RandomPolicy
@@ -200,5 +201,9 @@ def train_pets():
 
 if __name__ == "__main__":
     # test_cem_gt_dynamics(50)
-    # train_single_dynamics(50)
-    train_pets()
+    if(len(sys.argv[1:])<1):
+        print("Noob enter 0 or 1")
+    elif(sys.argv[1] == '0'):
+        train_single_dynamics(50)
+    elif(sys.argv[1] == '1'):
+        train_pets()

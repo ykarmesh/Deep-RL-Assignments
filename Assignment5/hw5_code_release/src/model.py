@@ -157,7 +157,7 @@ class PENN:
         Arguments:
             inputs: state and action inputs.  Assumes that inputs are standardized.
             targets: resulting states
-        """        
+        """     
         inputs = torch.tensor(inputs, device=self.device).float()
         targets = torch.tensor(targets, device=self.device).float()
         transition_dataset = StoredData(inputs, targets)
@@ -188,7 +188,7 @@ class PENN:
             self.summary_writer.add_scalar('train/loss', np.mean(total_loss_epochs, 0), self.total_epochs)
             self.summary_writer.add_scalar('train/rmse_error', np.mean(total_rmse_epochs, 0), self.total_epochs)
             self.total_epochs += 1
-
+            print("Trained epoch: ", i)
             if(self.total_epochs%100 == 0):
                 self.save_model(self.total_epochs)
 

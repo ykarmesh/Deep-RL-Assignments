@@ -11,7 +11,7 @@ class RandomOptimizer:
 
         self.plan_horizon = MPC.plan_horizon
         self.popsize = MPC.popsize * MPC.max_iters
-        self.num_trajectories = self.MPC.num_particles if (not self.MPC.use_gt_dynamics or (self.MPC.num_nets is not None and self.MPC.num_nets>1)) else 1
+        self.num_trajectories = self.MPC.num_particles if (not self.MPC.use_gt_dynamics) else 1
 
     def act(self, mu, sigma, state):
         states = np.tile(state, (self.popsize,1)) #check this
@@ -42,7 +42,7 @@ class CEMOptimizer:
         self.plan_horizon = MPC.plan_horizon
         self.popsize = MPC.popsize
         self.num_elites = MPC.num_elites
-        self.num_trajectories = self.MPC.num_particles if (not self.MPC.use_gt_dynamics or (self.MPC.num_nets is not None and self.MPC.num_nets>1)) else 1
+        self.num_trajectories = self.MPC.num_particles if (not self.MPC.use_gt_dynamics) else 1
 
     def act(self, mu, sigma, state): #check this
         for i in range(self.max_iters):
