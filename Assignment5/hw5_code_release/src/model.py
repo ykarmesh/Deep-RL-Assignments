@@ -136,9 +136,16 @@ class PENN:
         return mean, logvar
 
     def sample_next_state(self, state, action):
-        # pdb.set_trace()
-        mean, logvar = self.get_output(self.models[0](state, action))
-        sample_states = []
+        model_idx = torch.randint(self.num_nets, [state.shape[0]])
+        means = []; logvars=[]
+        for i in range(self.num_nets):
+            mean, logvar = self.get_output(self.models[i](state, action))
+            means.append(mean)
+            logvars.append(logvar)
+        means = torch.stack(means)
+        logvars = torch.stack(logvars)
+        mean = means[model_idx, torch.arange(state.shape[0]),:]
+        logvar = logvars[model_idx, torch.arange(state.shape[0]),:]
         
         normal_dist = Normal(mean.flatten(), torch.exp(logvar).flatten())
         sample_states = normal_dist.sample().view(state.shape)
@@ -150,17 +157,18 @@ class PENN:
         Arguments:
             inputs: state and action inputs.  Assumes that inputs are standardized.
             targets: resulting states
-        """        
+        """     
         inputs = torch.tensor(inputs, device=self.device).float()
         targets = torch.tensor(targets, device=self.device).float()
         transition_dataset = StoredData(inputs, targets)
         sampler = RandomSampler(transition_dataset, replacement=True)
         loader = DataLoader(transition_dataset, batch_size=128, sampler=sampler)
         for i in range(epochs):
-            total_loss = []
-            total_rmse = []
-
+            total_loss_epochs = []
+            total_rmse_epochs = []
             for j in range(self.num_nets):
+                total_loss = []
+                total_rmse = []
                 for k, (x, target) in enumerate(loader):
                     self.optimizers[j].zero_grad()
                     mean, logvar = self.get_output(self.models[j](x[:,:8], x[:,-2:]))
@@ -173,12 +181,15 @@ class PENN:
                     rmse_error = torch.mean(torch.sqrt(torch.mean(error_sq, dim=1)))
                     total_loss.append(loss.detach().cpu().numpy())
                     total_rmse.append(rmse_error.detach().cpu().numpy())
-
-            self.summary_writer.add_scalar('train/loss', np.mean(total_loss, 0), self.total_epochs)
-            self.summary_writer.add_scalar('train/rmse_error', np.mean(total_rmse, 0), self.total_epochs)
+                self.summary_writer.add_scalar('train/loss_'+str(j), np.mean(total_loss, 0), self.total_epochs)
+                self.summary_writer.add_scalar('train/rmse_error_'+str(j), np.mean(total_rmse, 0), self.total_epochs)
+                total_loss_epochs.append(np.mean(total_loss, 0))
+                total_rmse_epochs.append(np.mean(total_rmse, 0))
+            self.summary_writer.add_scalar('train/loss', np.mean(total_loss_epochs, 0), self.total_epochs)
+            self.summary_writer.add_scalar('train/rmse_error', np.mean(total_rmse_epochs, 0), self.total_epochs)
             self.total_epochs += 1
-
-            if(self.total_epochs%5 == 0):
+            print("Trained epoch: ", i)
+            if(self.total_epochs%100 == 0):
                 self.save_model(self.total_epochs)
 
     def get_nxt_state(self, state, action):
@@ -196,12 +207,6 @@ class PENN:
             next_state = self.sample_next_state(state, action).cpu().numpy().squeeze()
         # except:
         return next_state
-    
-    def TS1(self, num_particles, horizon):
-        s = np.zeros((num_particles, horizon))
-        for p in num_particles:
-            s[p,:] = np.random.randint(0, self.num_nets-1)
-        return s
 
 
     # TODO: Write any helper functions that you need

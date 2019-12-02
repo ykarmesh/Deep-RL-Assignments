@@ -5,6 +5,7 @@ import envs
 import os.path as osp
 from datetime import datetime
 from tensorboardX import SummaryWriter
+import sys
 
 import torch
 from agent import Agent, RandomPolicy
@@ -108,18 +109,19 @@ class ExperimentModelDynamics:
 
     def train(self, num_train_epochs, num_episodes_per_epoch, evaluation_interval):
         """ Jointly training the model and the policy """
-
+        samples = []
         for i in range(num_train_epochs):
             print("####################################################################")
             print("Starting training epoch %d." % (i + 1))
 
-            samples = []
+            
             for j in range(num_episodes_per_epoch):
-                samples.append(
-                    self.agent.sample(
+                new_sample = self.agent.sample(
                         self.task_horizon, self.cem_policy
                     )
-                )
+                samples.append(new_sample)
+            if(len(samples)>10*num_episodes_per_epoch):
+                samples = samples[num_episodes_per_epoch:]
             print("Rewards obtained:", [sample["reward_sum"] for sample in samples])
 
             self.cem_policy.train(
@@ -130,10 +132,15 @@ class ExperimentModelDynamics:
             )
 
             if (i + 1) % evaluation_interval == 0:
-                avg_return, avg_success = self.test(50, optimizer='cem')
-                print('Test success CEM + MPC:', avg_success)
-                avg_return, avg_success = self.test(50, optimizer='random')
-                print('Test success Random + MPC:', avg_success)
+                cem_avg_return, cem_avg_success = self.test(20, optimizer='cem')
+                print('Test success CEM + MPC:', cem_avg_success)
+                rand_avg_return, rand_avg_success = self.test(20, optimizer='random')
+                print('Test success Random + MPC:', rand_avg_success)
+
+                self.summary_writer.add_scalar("test/CEM-AverageSuccess", cem_avg_success, i)
+                self.summary_writer.add_scalar("test/Rand-AverageSuccess", rand_avg_success, i)
+                self.summary_writer.add_scalar("test/CEM-AverageReturn", cem_avg_return, i)
+                self.summary_writer.add_scalar("test/Rand-AverageReturn", rand_avg_return, i)
 
 
 def test_cem_gt_dynamics(num_episode=10):
@@ -195,5 +202,9 @@ def train_pets():
 
 if __name__ == "__main__":
     # test_cem_gt_dynamics(50)
-    train_single_dynamics(50)
-    # train_pets()
+    if(len(sys.argv[1:])<1):
+        print("Noob enter 0 or 1")
+    elif(sys.argv[1] == '0'):
+        train_single_dynamics(50)
+    elif(sys.argv[1] == '1'):
+        train_pets()
