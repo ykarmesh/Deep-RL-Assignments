@@ -61,41 +61,39 @@ class Agent:
             'rewards': np.array(rewards),
         }
 
-        self.plot(trajectory)
+        # self.plot(trajectory)
         return np.array(actions).T, states
 
     def run_iLQR(self):
-        tN = 114
+        tN = 100
         rewards = []
         U, LQR_X = self.run_LQR()
         U = U[:, :tN]
         self.env.state = LQR_X[0]
-        import pdb; pdb.set_trace()
         states, actions = [LQR_X[0]], []
         
-        # U = np.ones((self.env.action_space.shape[0], tN))*100
+        U = np.zeros((self.env.action_space.shape[0], tN))*100
         
         self.sim_env = deepcopy(self.env)
-        # self.sim_env.reset()
 
         count = 0
         i = 0
 
-        U = calc_ilqr_input(self.env, self.sim_env, U, tN=tN)
-        while True:
+        U, costs = calc_ilqr_input(self.env, self.sim_env, U, tN=tN)
+        while count < tN:
             # if i >= tN:
             #     print('\nRewards Sum:', np.sum(rewards))
             #     U = calc_ilqr_input(self.env, self.sim_env, U, tN=tN)
             #     i = 0 
-            U = calc_ilqr_input(self.env, self.sim_env, U, tN=tN)
-            state, reward, done, info = self.env.step(U[:, 0])
+            # U = calc_ilqr_input(self.env, self.sim_env, U, tN=tN)
+            state, reward, done, info = self.env.step(U[:, count])
 
             time.sleep(0.1)
             self.env.render()
 
             states.append(state)
             rewards.append(reward)
-            actions.append(U[:, 0])
+            actions.append(U[:, count])
 
             # Display step
             sys.stdout.write('\rSteps: %04d | Reward: %d\t' % (count, reward))
@@ -113,7 +111,7 @@ class Agent:
             'rewards': np.array(rewards),
         }
 
-        self.plot(trajectory)
+        self.plot(trajectory, costs)
 
     def run(self):
         if self.algo == 'LQR':
@@ -125,11 +123,12 @@ class Agent:
             print("Wrong Algorithm selected: {}".format(self.policy))
 
 
-    def plot(self, trajectory):
+    def plot(self, trajectory, costs=None):
         total = len(trajectory['rewards'])
 
         # Joint angles plot
         plt.title(r'%s: Joint Angles (q)' % self.env_name)
+        import pdb; pdb.set_trace()
         plt.plot(trajectory['states'][:, 0], label=r'$q_1$')
         plt.plot(trajectory['states'][:, 1], label=r'$q_2$')
         plt.xlabel('Steps (Total: %d)' % total)
@@ -159,6 +158,17 @@ class Agent:
         plt.legend()
         plt.grid()
         plt.savefig(os.path.join(self.folder, 'control_inputs.png'), dpi=300)
+
+        # cost
+        if costs is not None:
+            plt.figure()
+            plt.title(r'%s: Cost (u)' % self.env_name)
+            plt.plot(costs[:], label=r'$u_1$')
+            plt.xlabel('Steps (Total: %d)' % total)
+            plt.ylabel('Cost')
+            plt.legend()
+            plt.grid()
+            plt.savefig(os.path.join(self.folder, 'cost.png'), dpi=300)
 
 
 if __name__ == '__main__':

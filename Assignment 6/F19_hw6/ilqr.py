@@ -49,9 +49,9 @@ def cost_inter(env, x, u):
     corresponding variables, ex: (1) l_x is the first order derivative d l/d x (2) l_xx is the second order derivative
     d^2 l/d x^2
     """
-    l = (x - env.goal).T @ env.Q @ (x - env.goal) + u.T @ env.R @ u
-    l_x = 2 * (x - env.goal).T @ env.Q 
-    l_xx = 2 * env.Q
+    l = u.T @ env.R @ u
+    l_x = np.zeros((x.shape[0])) # 2 * (x - env.goal).T @ env.Q 
+    l_xx = np.zeros((x.shape[0], x.shape[0])) # 2 * env.Q
     l_u = 2 * u.T @ env.R 
     l_uu = 2 * env.R
     l_ux = np.zeros((u.shape[0], x.shape[0]))
@@ -81,6 +81,15 @@ def cost_final(env, x):
     
     return l, l_x, l_xx
 
+def get_total_cost(env, X, U, tN):
+    l_total = 0
+    l, l_x, l_xx = cost_final(env, X[:, -1])
+    l_total += l
+    for i in range(tN-2,-1,-1):
+        # pdb.set_trace()
+        l, l_x, l_xx, l_u, l_uu, l_ux = cost_inter(env, X[:, i].copy(), U[:, i].copy()) 
+        l_total += l
+    return l_total
 
 def simulate(env, x0, U):
     env.state = x0.copy()
@@ -124,7 +133,7 @@ def forward_pass(env, X, U, k, K):
 
 
 
-def calc_ilqr_input(env, sim_env, old_actions, tN=50, max_iters=1e6, tol=1e-3, lamb_factor=10.0):
+def calc_ilqr_input(env, sim_env, old_actions, tN=50, max_iters=1e6, tol=1e-3, lamb_factor=3.0):
     """Calculate the optimal control input for the given state.
 
     Parameters
@@ -151,16 +160,19 @@ def calc_ilqr_input(env, sim_env, old_actions, tN=50, max_iters=1e6, tol=1e-3, l
     X = simulate(sim_env, x_0, U)
     J_old = sys.float_info.max
     lamb = 1.0
-    max_lamb=10000000000
+    max_lamb=100000000
+    J_store = []
 
     print("New Iteration")
     for i in range(int(max_iters)):
         k, K = backward_pass(sim_env, X, U, tN, lamb)
         
         # Get control values at control points and new states again by a forward rollout
-        X_new, U_new, J_new = forward_pass(sim_env, X, U, k, K)
-        
+        X_new, U_new, _ = forward_pass(sim_env, X, U, k, K)
+
+        J_new = get_total_cost(env, X_new, U_new, tN)
         if J_new < J_old:
+            J_store.append(J_new)
             # print("Good Iter")
             print("Update Time: {} {}".format(J_new, J_old))
             lamb /= lamb_factor
@@ -178,8 +190,8 @@ def calc_ilqr_input(env, sim_env, old_actions, tN=50, max_iters=1e6, tol=1e-3, l
                 lamb = max_lamb
                 break
             
-    print("Returning Actions: iterations {} cost {}".format(i, J_new))
-    return U
+    print("Returning Actions: iterations {} cost {}".format(i, J_old))
+    return U, J_store
 
 def backward_pass(env, X, U, tN=50, lamb=1):   
     # Value function at final timestep is known
